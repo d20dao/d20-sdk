@@ -1,13 +1,13 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "8fe545a56aa8beea294a96b3ef3fd17a3f514b6b",
+  "sourceCommit": "d7e785dda57499220bd37d73bc6fad9226872dcc",
   "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
-    "contracts/D20VRFConsumer.sol": "79e1e865141fdb377c3c5535206b4fced12487315ed6726e21c71ad88831153d",
-    "contracts/D20VRFCoordinator.sol": "ea4f886c88e089f7561d63f65a66135b531c5baca20a3f40789729414c61279a",
+    "contracts/D20VRFConsumer.sol": "9200fcd8825756ba6978e42d94b52e82e6dea9b1ba35dc506652490194e16162",
+    "contracts/D20VRFCoordinator.sol": "4f9f842e6b5cb024f4113af566172a0ef62973644ef91aae48d0caf48c301afa",
     "contracts/examples/MiningRandomnessConsumer.sol": "0a5d573266dbd3e531464cb795901e0f0060b9f6fbf9c7a52853f722093eb6a5",
-    "contracts/interfaces/ID20VRF.sol": "a851253a4a62b245d4fb3dae9a73adf746670e5f509c6ca25321192f2d6bca8b",
+    "contracts/interfaces/ID20VRF.sol": "a9897086d751339b237e11c70bf99034080c75e5cf7876f2c9147e09d61f48fb",
     "contracts/libraries/D20VRFRequests.sol": "8f0ee77eefd45d0667f9cd67f2db149850cd1f0da3bf5133335f8323cd5ea6d4",
     "contracts/libraries/RandomnessMapping.sol": "00bce68c1a6d89903d72d1c3f9ee5e1a56392188ed29b6aa32ab7451ef180c91",
     "contracts/vendor/CHAINLINK-LICENSE": "25a502f8fd39602de8a98cc4835a4bf81851b095d6f2c5c130bf0863afac6c99",

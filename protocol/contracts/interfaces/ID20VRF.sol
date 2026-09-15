@@ -16,3 +16,8 @@ interface ID20VRF {
 interface ID20VRFConsumer {
     function rawFulfillRandomness(uint256 requestId, bytes32 randomness) external;
 }
+
+/// @notice Optional notification after the RNG fee was refunded or recorded as backed credit.
+interface ID20VRFRefundConsumer {
+    function onRefund(uint256 requestId) external;
+}

@@ -33,3 +33,11 @@ Both service contracts use atomically initialized D20Proxy endpoints with owner-
 Always configure the actual chain explicitly; there is no implicit Arc network default. Obtain consumer onboarding and approved proxy/configuration details before live requests. Healthy process status does not guarantee a particular request's timely fulfillment.
 
 This SDK holds no signer or bot keys, runs no keeper/prover and exposes no operator API. Optional Telegram access is disabled by default and limited to read-only /status and /keeper in the configured operator chat. Those commands cannot alter configuration or send transactions. Docker provisioning, upgrades, funding and publishing are separate operator actions, not consequences of SDK integration.
+
+## Optional refund notification
+
+A coordinator with refund-hook support calls `onRefund(requestId)` on the original consumer after the fee is paid to its fixed refund address or recorded as backed credit. Extend `D20VRFConsumer` and override `_onRefund(uint256 requestId)` to update application state; the base authenticates the coordinator. The callback only carries the request ID and does not imply that the consumer itself received money. Application assets and fees remain the application's responsibility.
+
+The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook cannot undo the fee settlement. After failure, `retryRefundCallback(requestId, gasLimit)` retries the notification without another payment; successful delivery is recorded by `refundCallbackDelivered(requestId)`. Refund/retry needs sufficient outer gas. Never request new randomness from within either callback; use a separate application transaction.
+
+This SDK includes the new source interface. Installing it does not upgrade a deployed coordinator: verify the implementation and its refund-hook capability before relying on notification delivery.

@@ -6,7 +6,7 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EpochEntropy} from "./EpochEntropy.sol";
 import {VRF} from "./vendor/VRF.sol";
-import {ID20VRF, ID20VRFConsumer} from "./interfaces/ID20VRF.sol";
+import {ID20VRF, ID20VRFConsumer, ID20VRFRefundConsumer} from "./interfaces/ID20VRF.sol";
 import {RandomnessMapping} from "./libraries/RandomnessMapping.sol";
 
 /// @notice Single-operator secp256k1 VRF. Proof submission and callback retries are permissionless.
@@ -16,6 +16,7 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
     uint32 public constant MIN_CALLBACK_GAS = 30_000;
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
     uint64 public constant RESPONSE_TIMEOUT = 60 seconds;
+    uint32 public constant REFUND_CALLBACK_GAS = 100_000;
     uint256 public constant MAX_EVIDENCE_PACKET_BYTES = 512;
     uint256 private constant CALLBACK_RESERVE = 140_000;
     bytes32 public constant SEED_DOMAIN = keccak256("D20_VRF_SEED");
@@ -84,8 +85,9 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
     }
     mapping(uint256 => StoredRequest) private requests;
     mapping(uint256 => RandomnessMapping.Spec) private mappingSpecs;
+    mapping(uint256 => bool) public refundCallbackDelivered;
     // Preserve declared fields, packing and mapping value layouts across upgrades.
-    uint256[40] private __gap;
+    uint256[39] private __gap;
     error InvalidConfig();
     error EpochUnavailable();
     error InvalidPublicKey();
@@ -109,6 +111,8 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
     error RefundNotAvailable();
     error NoRefundCredit();
     error NoKeeperCredit();
+    error NotRefunded();
+    error RefundCallbackAlreadyDelivered();
     error InvalidScan();
     error EvidencePacketTooLarge();
 
@@ -127,6 +131,7 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
     event KeeperCreditWithdrawn(address indexed keeper, address indexed recipient, uint256 amount);
     event RequestRefundedTo(uint256 indexed requestId, address indexed refundAddress, uint256 amount, bool paid);
     event RefundCreditWithdrawn(address indexed owner, address indexed recipient, uint256 amount);
+    event RefundCallbackAttempted(uint256 indexed requestId, address indexed consumer, bool success, uint32 gasLimit);
     event MappingRequested(uint256 indexed requestId, bytes32 indexed mappingHash, RandomnessMapping.Spec spec);
     event ProofVerified(uint256 indexed requestId, bytes32 indexed keyHash, uint256 seed, bytes32 proofHash);
     event RequestServed(uint256 indexed requestId, uint256 indexed serveIndex);
@@ -359,7 +364,8 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
         refundCredits[r.refundAddress] += requestFee;
         totalRefundCredits += requestFee;
         // Reserve enough gas to record a failed transfer; never copy arbitrary return data.
-        if (gasleft() < 100_000) revert InsufficientCallbackGas();
+        // Include the notification budget so gas estimation cannot silently skip the hook.
+        if (gasleft() < uint256(REFUND_CALLBACK_GAS) + REFUND_CALLBACK_GAS / 63 + 140_000) revert InsufficientCallbackGas();
         address recipient = r.refundAddress;
         uint256 amount = requestFee;
         bool success;
@@ -369,6 +375,30 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
             totalRefundCredits -= amount;
         }
         emit RequestRefundedTo(requestId, recipient, amount, success);
+        _deliverRefund(requestId, r.consumer, REFUND_CALLBACK_GAS);
+    }
+
+    /// @notice Retry only a failed refund notification. Never transfers the fee a second time.
+    function retryRefundCallback(uint256 requestId, uint32 gasLimit) external nonReentrant {
+        StoredRequest storage r = _request(requestId);
+        if (!r.refunded) revert NotRefunded();
+        if (refundCallbackDelivered[requestId]) revert RefundCallbackAlreadyDelivered();
+        _checkGasLimit(gasLimit);
+        if (gasLimit < REFUND_CALLBACK_GAS) revert InvalidCallbackGas();
+        _deliverRefund(requestId, r.consumer, gasLimit);
+    }
+
+    function _deliverRefund(uint256 requestId, address consumer, uint32 gasLimit) private {
+        // Effects and refund transfer/credit have already settled under the shared guard.
+        // Never allocate or copy consumer return data, including revert-data bombs.
+        if (gasleft() < uint256(gasLimit) + gasLimit / 63 + 50_000) revert InsufficientCallbackGas();
+        bytes memory payload = abi.encodeCall(ID20VRFRefundConsumer.onRefund, (requestId));
+        bool success;
+        assembly ("memory-safe") {
+            success := call(gasLimit, consumer, 0, add(payload, 32), mload(payload), 0, 0)
+        }
+        if (success) refundCallbackDelivered[requestId] = true;
+        emit RefundCallbackAttempted(requestId, consumer, success, gasLimit);
     }
 
     /// @notice Only the original refund recipient can redirect its own failed-transfer credit.

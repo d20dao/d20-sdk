@@ -66,3 +66,11 @@ External review, provider quotas, actual chain fees/timing, upgrade administrati
 ## Arc Testnet pilot
 
 A restricted pilot is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Consumer allowlisting is required. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA. SDK npm publication remains separate from this GitHub testnet release.
+
+## Optional refund notification
+
+A coordinator with refund-hook support calls `onRefund(requestId)` on the original consumer after the fee is paid to its fixed refund address or recorded as backed credit. Extend `D20VRFConsumer` and override `_onRefund(uint256 requestId)` to update application state; the base authenticates the coordinator. The callback only carries the request ID and does not imply that the consumer itself received money. Application assets and fees remain the application's responsibility.
+
+The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook cannot undo the fee settlement. After failure, `retryRefundCallback(requestId, gasLimit)` retries the notification without another payment; successful delivery is recorded by `refundCallbackDelivered(requestId)`. Refund/retry needs sufficient outer gas. Never request new randomness from within either callback; use a separate application transaction.
+
+This SDK includes the new source interface. Installing it does not upgrade a deployed coordinator: verify the implementation and its refund-hook capability before relying on notification delivery.

@@ -10,6 +10,7 @@ contract DiceConsumer is D20VRFConsumer {
     using D20VRFRequests for ID20VRF;
     struct Roll { address player; bytes32 rawWord; bool ready; }
     mapping(uint256 => Roll) public rolls;
+    mapping(uint256 => bool) public refunded;
     error WrongFee();
     error UnexpectedCallback();
     error NotReady();
@@ -25,9 +26,16 @@ contract DiceConsumer is D20VRFConsumer {
 
     function _fulfillRandomness(uint256 requestId, bytes32 randomness) internal override {
         Roll storage result = rolls[requestId];
-        if (result.player == address(0) || result.ready) revert UnexpectedCallback();
+        if (result.player == address(0) || result.ready || refunded[requestId]) revert UnexpectedCallback();
         result.rawWord = randomness;
         result.ready = true;
+    }
+
+    // Requires a coordinator implementation supporting refund notifications.
+    function _onRefund(uint256 requestId) internal override {
+        Roll storage result = rolls[requestId];
+        if (result.player == address(0) || result.ready) revert UnexpectedCallback();
+        refunded[requestId] = true;
     }
 
     function result(uint256 requestId) external view returns (uint256) {

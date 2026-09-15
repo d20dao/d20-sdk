@@ -1,6 +1,6 @@
 # ArcDao VRF SDK — unreleased alpha
 
-Public epoch attestation, VRF replay and mapping helpers, generated coordinator/epoch-registry ABIs and minimal Solidity consumer imports. The current protocol is epoch API3 plus fixed-key VRF: a signed record is committed before each 200-block service epoch, then every request fixes that epoch ID/hash in its deterministic VRF input. Game fulfillment submits only the real VRF proof; it makes no per-game API call.
+Public SDK for a general randomness service: epoch attestation, VRF replay and mapping helpers, generated coordinator/epoch-registry ABIs and minimal Solidity consumer imports. The current protocol is epoch API3 plus fixed-key VRF: a signed record is committed before each 200-block service epoch, then every request fixes that epoch ID/hash in its deterministic VRF input. Randomness fulfillment submits only the real VRF proof; it makes no per-request API call.
 
 `@arcdao/vrf-sdk` `0.1.0-alpha.0` is provisional and private. Scope ownership is unverified. Local pack/install is supported; publishing remains blocked pending protocol/operator review and an explicitly authorized release.
 
@@ -47,7 +47,7 @@ The dice starter requires exact `msg.value == requestFee()`, fixes the refund re
 
 A request is admitted only in a committed epoch. Before the first epoch starts, or when the current epoch has no commitment, creation reverts and retains no request fee. The signed epoch record must be committed before the epoch starts. A late commitment cannot repair an already-started epoch. An accepted request keeps its original epoch across subsequent epoch boundaries.
 
-Valid proof acceptance must occur onchain at or before request time +60 seconds. Callback failure does not undo paid service: `retryCallback(id, gasLimit)` redelivers only the same accepted result. An expired unfulfilled request uses `refundRequest(id)`; payment goes to its fixed recipient or refund credit, not the caller. These recovery functions belong to the full coordinator ABI, not the smaller consumer interface. Game-payment refunds remain separate.
+Valid proof acceptance must occur onchain at or before request time +60 seconds. Callback failure does not undo paid service: `retryCallback(id, gasLimit)` redelivers only the same accepted result. An expired unfulfilled request uses `refundRequest(id)`; payment goes to its fixed recipient or refund credit, not the caller. These recovery functions belong to the full coordinator ABI, not the smaller consumer interface. Application-payment refunds remain separate.
 
 ## Verify public evidence
 
@@ -57,7 +57,7 @@ The coordinator's `FulfillmentEvidence.packet` contains only the VRF proof. Deco
 
 Decoding is not verification. Replay does not authenticate RPC responses or establish receipt inclusion itself. Never derive an expected key or input from the submitted proof. Mapping alone does not verify a proof. Apply the integrator's finality/reorg policy. API3 signatures establish signed wrapper provenance, not unbiased upstream data or immunity to withholding.
 
-This public package does not fetch or publish epochs, generate proofs, hold secrets, send transactions or supply a keeper service. The separate keeper publisher prepares epochs in the background through the same wallet nonce lane as fulfillment; game requests need no additional API fetch. Resolved keeper history compaction removes raw replay payloads while retaining identities, hashes and status metadata; public replay should read the original chain events, not expect a permanent raw-payload archive in the keeper database.
+This public package does not fetch or publish epochs, generate proofs, hold secrets, send transactions or supply a keeper service. The separate keeper publisher prepares epochs in the background through the same wallet nonce lane as fulfillment; randomness requests need no additional API fetch. Resolved keeper history compaction removes raw replay payloads while retaining identities, hashes and status metadata; public replay should read the original chain events, not expect a permanent raw-payload archive in the keeper database.
 
 ## Maintenance and release boundary
 

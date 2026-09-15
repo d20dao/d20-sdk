@@ -20,6 +20,7 @@
       "import": "./dist/abi.js"
     },
     "./abi/ArcVRFCoordinator.json": "./abi/ArcVRFCoordinator.json",
+    "./abi/EntropySnapshots.json": "./abi/EntropySnapshots.json",
     "./contracts/*": "./contracts/*",
     "./examples/*": "./examples/*",
     "./AGENTS.md": "./AGENTS.md"
@@ -28,6 +29,7 @@
     "dist/*.js",
     "dist/*.d.ts",
     "abi/ArcVRFCoordinator.json",
+    "abi/EntropySnapshots.json",
     "contracts/**/*.sol",
     "examples/*.sol",
     "AGENTS.md",
@@ -54,13 +56,13 @@
     "solc": "0.8.28",
     "typescript": "5.9.3"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/d20dao/d20-sdk.git"
-  },
   "overrides": {
     "solc": {
       "tmp": "0.2.7"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/d20dao/d20-sdk.git"
   }
 }

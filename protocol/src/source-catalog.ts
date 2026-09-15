@@ -37,3 +37,14 @@ export const preferredRecordProfiles = [
   {source: EntropySource.GeoDb, record: "Country/city identifier and a bounded reference field", avoid: "Population, cityDateTime, unconstrained searches"},
   {source: EntropySource.Eodhd, record: "One instrument and raw close from a completed session", avoid: "Live quotes, news, retrospectively split-adjusted close"},
 ] as const;
+
+// Independent of V1 direct-recipe status above. Evidence: snapshot-candidates-2026-09-15-r2.json.
+// Admission is exact query/signature/shape/bounds verification, not deployment or an uptime guarantee.
+export const snapshotSourceCatalog = sourceCatalog.map(source => ({
+  ...source,
+  operation: source.id === EntropySource.PandaScore ? "matchesPast" : source.operation,
+  policy: "immutable-precommitted-snapshot" as const,
+  status: ([2, 3, 5, 6, 8, 9] as number[]).includes(source.id)
+    ? "live-snapshot-admission-passed" as const : "signed-projection-unsupported" as const,
+  measuredAt: "2026-09-15",
+}));

@@ -61,7 +61,14 @@ export function hashAttestation(requestHash: string, a: ApiAttestation): string 
   return keccak256(abi.encode(["bytes32", "uint256", "bytes32", "bytes32"],
     [requestHash, a.timestamp, keccak256(a.data), keccak256(a.signature)]));
 }
+export function validateApiSignatureEncoding(signature: string): void {
+  const bytes = getBytes(signature);
+  if (bytes.length !== 65 || (bytes[64] !== 27 && bytes[64] !== 28) ||
+    BigInt(hexlify(bytes.slice(32, 64))) > 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n)
+    throw new Error("Expected canonical 65-byte low-s EIP-191 signature");
+}
 export function verifyApiAttestation(selected: SourceSelection, a: ApiAttestation, requestedAt: bigint, deadline: bigint, now: bigint) {
+  validateApiSignatureEncoding(a.signature);
   if (a.timestamp < requestedAt || a.timestamp > deadline || a.timestamp > now)
     throw new Error(`Invalid attestation time: signed=${a.timestamp}, requested=${requestedAt}, deadline=${deadline}, now=${now}`);
   const bytes = getBytes(a.data);

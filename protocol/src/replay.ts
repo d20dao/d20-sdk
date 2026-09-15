@@ -1,7 +1,8 @@
 import { AbiCoder, id, keccak256 } from "ethers";
 import { hashMapping, mapRandomness } from "./mapping.ts";
-import { selectSource, sourceConfigurationHash, verifyApiAttestation, type ApiAttestation } from "./sources.ts";
+import { selectSource, sourceConfigurationHash, verifyApiAttestation, type ApiAttestation, type SourceSelection } from "./sources.ts";
 import { deriveRequestSeed, hashPublicKey, hashProof, verifyVRFProof, type RequestContext, type VRFProof, type XY } from "./verification.ts";
+import {selectSnapshot, snapshotConfigurationHash, verifySnapshotAttestation, type SnapshotCatalog} from "./snapshots.ts";
 
 export function transcriptHash(context: RequestContext, attestationHash: string, proofHash: string, randomness: string): string {
   return keccak256(AbiCoder.defaultAbiCoder().encode(
@@ -16,16 +17,21 @@ export function replayCoordinator(input: {
   context: RequestContext; requestedAt: bigint; deadline: bigint; acceptanceTimestamp: bigint;
   publicKey: XY; sourceSigners: readonly string[]; apiProof: ApiAttestation; vrfProof: VRFProof;
   enabledSourceMask?: number;
+  snapshotCatalog?: SnapshotCatalog;
   recorded: { fulfilled: boolean; randomness: string; apiDataHash: string; proofHash: string; transcriptHash: string };
 }) {
   const c = input.context;
   if (hashPublicKey(input.publicKey) !== c.keyHash) throw new Error("Public key commitment mismatch");
-  if (sourceConfigurationHash(input.sourceSigners, input.enabledSourceMask ?? 7) !== c.sourceConfigurationHash) throw new Error("Source configuration mismatch");
+  const catalogHash = input.snapshotCatalog ? snapshotConfigurationHash(input.snapshotCatalog.records)
+    : sourceConfigurationHash(input.sourceSigners, input.enabledSourceMask ?? 7);
+  if (catalogHash !== c.sourceConfigurationHash) throw new Error("Source configuration mismatch");
   if (input.deadline !== input.requestedAt + 60n || input.acceptanceTimestamp < input.requestedAt || input.acceptanceTimestamp > input.deadline)
     throw new Error("Invalid acceptance deadline");
-  const selected = selectSource(c.requestId, c.blockHash, input.requestedAt, input.sourceSigners, input.enabledSourceMask ?? 7);
+  const selected = input.snapshotCatalog ? selectSnapshot(c.requestId, c.blockHash, input.requestedAt, input.snapshotCatalog)
+    : selectSource(c.requestId, c.blockHash, input.requestedAt, input.sourceSigners, input.enabledSourceMask ?? 7);
   if (selected.requestHash !== c.apiRequestHash) throw new Error("Source/query/projection mismatch");
-  const api = verifyApiAttestation(selected, input.apiProof, input.requestedAt, input.deadline, input.acceptanceTimestamp);
+  const api = input.snapshotCatalog ? verifySnapshotAttestation(selected, input.apiProof, input.snapshotCatalog)
+    : verifyApiAttestation(selected as SourceSelection, input.apiProof, input.requestedAt, input.deadline, input.acceptanceTimestamp);
   if (api.dataHash !== c.apiDataHash) throw new Error("API data commitment mismatch");
   const seed = deriveRequestSeed(c);
   const vrf = verifyVRFProof(input.vrfProof, input.publicKey, seed);

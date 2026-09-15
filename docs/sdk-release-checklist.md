@@ -5,7 +5,7 @@ Status: **blocked; local packaging smoke only**. No npm scope availability/owner
 Before proposing release:
 
 - Complete keeper review and readiness decision; resolve or explicitly disposition protocol Seed V2 response-selection risk, source admission and external VRF crypto review.
-- Resolve public TypeScript versus Solidity signature-canonicality verification parity; a passing SDK smoke cannot establish protocol equivalence.
+- Preserve public TypeScript versus Solidity signature-canonicality parity and verify both direct-source and snapshot modes against canonical protocol tests; a passing SDK smoke cannot establish protocol equivalence.
 - Validate actual chain block timing, fee/native-token behavior, immutable coordinator source/key configuration, game payment refunds and operator recovery.
 - Confirm consumer onboarding to the keeper allowlist before accepting live game requests; permissionless coordinator submission is not a service guarantee.
 - Verify npm scope ownership, intended registry, package name/version and license/provenance. Review the actual tarball and dependencies for secrets, fixtures, keeper code and test provers.

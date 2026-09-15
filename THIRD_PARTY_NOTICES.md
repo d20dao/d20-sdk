@@ -5,3 +5,5 @@ The redistributed consumer Solidity files and public TypeScript helpers are from
 Public proof verification implements compatibility with the pinned Chainlink secp256k1/Keccak construction. Its upstream provenance and full preserved root license are included in `notices/PROVENANCE.md` and `notices/CHAINLINK-LICENSE`. The provenance path describes the original repository, not a bundled verifier. This is not a Chainlink service or an extension of an upstream audit.
 
 `ethers` and `@noble/curves` are runtime npm dependencies, not copied/bundled source. Their distributions carry their own licenses and transitive dependency notices. Build-only Solidity compilation uses OpenZeppelin 5.6.1 and solc 0.8.28; neither is bundled into the public JavaScript.
+
+The repository and isolated smoke consumer override solc's build-only `tmp` dependency to 0.2.7 to address GHSA-52f5-9888-hmc6, GHSA-ph9p-34f9-6g65 and GHSA-7c78-jf6q-g5cm while preserving compiler 0.8.28. npm overrides apply only at a project's root; this does not impose an override on SDK consumers, and solc is not an SDK runtime dependency.

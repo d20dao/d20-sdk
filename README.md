@@ -1,6 +1,16 @@
-# d20dao VRF SDK — unreleased alpha
+# d20dao VRF SDK
 
-Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. The package is `@d20dao/vrf-sdk` `0.1.0-alpha.0`. It remains private and publishing is guarded; local packaging is not a release or deployment claim.
+Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.1.0`.
+
+## Getting started
+
+```sh
+npm install @d20dao/vrf-sdk
+```
+
+Use Node 22.13 or newer and Solidity 0.8.28. Configure the coordinator proxy from the [current deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json), then follow the consumer example below. Arc Testnet is chain 5042002; arrange consumer allowlisting before live requests. Read `requestFee()` at runtime and keep application payments separate.
+
+For agent-assisted integration, give your agent the installed `AGENTS.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). Website guides include Getting started, Copy prompt, `/llms.txt`, `/llms-full.txt` and `/agents.md`.
 
 ## Current request flow
 
@@ -12,7 +22,7 @@ The four ordered recipe slots are Hyperliquid BTC volume, ANU quantum data, Tick
 
 ## Use locally
 
-With Node >=22.13, run `npm ci` and `npm test`. The test builds, packs and installs a real tarball in an isolated consumer. Install the filename reported by `npm pack` in your application; no registry publication is implied.
+For SDK development, run `npm ci` and `npm test` from this repository. The test builds, packs and installs a real tarball in an isolated consumer. `npm pack` also produces an installable local artifact.
 
 ```js
 import { builtins, mapRandomness, replayCoordinator } from '@d20dao/vrf-sdk';
@@ -61,11 +71,11 @@ Builds use reviewed protocol Git blobs and verify every SHA-256 in PROTOCOL-PROV
 
 Fixture provenance distinguishes explicit CI signatures from actual API3 responses. Fixtures are not included in the package. The browser-target bundle is executed under Node, not an actual browser session; independently trusted chain context is still required for real verification.
 
-External review, provider quotas, actual chain fees/timing, upgrade administration, operational recovery and application refunds remain release gates. A healthy process alone does not guarantee a particular request's timely fulfillment. Keep the private flag and unconditional publish guard until a concrete release is authorized. Local validation does not authorize publishing or deployment.
+SDK installation provides consumer and verification tooling. Chain availability, provider quotas, upgrade administration and application settlement remain separate concerns. A healthy process alone does not guarantee a particular request's timely fulfillment.
 
 ## Arc Testnet pilot
 
-A restricted pilot is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Consumer allowlisting is required. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA. SDK npm publication remains separate from this GitHub testnet release.
+A restricted pilot is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Consumer allowlisting is required. The manifest includes the activated refund-notification implementation. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA.
 
 ## Optional refund notification
 

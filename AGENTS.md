@@ -1,6 +1,6 @@
 # d20dao consumer-agent guide
 
-Use this guide when integrating @d20dao/vrf-sdk into an application or interpreting its public evidence. The package provides a general randomness interface; dice and mining contracts are examples. Read installed declarations for exact types and match PROTOCOL-PROVENANCE.json to the deployment being used. The current alpha is not a published service guarantee.
+Use this guide when integrating @d20dao/vrf-sdk into an application or interpreting its public evidence. Install with `npm install @d20dao/vrf-sdk`. The package provides a general randomness interface; dice and mining contracts are examples. Read installed declarations for exact types and match the packaged PROTOCOL-PROVENANCE.json to the deployment being used.
 
 ## Public interfaces
 

@@ -1,8 +1,8 @@
 {
   "name": "@d20dao/vrf-sdk",
-  "version": "0.1.0-alpha.0",
-  "description": "Public d20dao VRF replay helpers and Solidity consumer starter sources (unreleased alpha)",
-  "private": true,
+  "version": "0.1.0",
+  "description": "D20DAO verifiable randomness: Solidity consumer helpers, contract ABIs and public proof replay",
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -39,14 +39,14 @@
     "THIRD_PARTY_NOTICES.md",
     "notices/*",
     "BUILD-MANIFEST.json",
-    "scripts/block-publish.mjs",
+    "PROTOCOL-PROVENANCE.json",
     "abi/D20VRFCoordinator.json",
     "abi/EpochEntropy.json"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
-    "prepublishOnly": "node scripts/block-publish.mjs",
+    "prepublishOnly": "npm test",
     "test": "node scripts/smoke.mjs"
   },
   "dependencies": {

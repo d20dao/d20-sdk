@@ -22,17 +22,16 @@ function packedInfo(args) {
 const dry = packedInfo(['pack', '--dry-run', '--json']);
 const packed = packedInfo(['pack', '--json']);
 assert.deepEqual(dry.files.map(f => f.path), packed.files.map(f => f.path));
-const required = ['AGENTS.md', 'LICENSE', 'README.md', 'BUILD-MANIFEST.json', 'dist/index.js', 'dist/index.d.ts',
+const required = ['AGENTS.md', 'LICENSE', 'README.md', 'BUILD-MANIFEST.json', 'PROTOCOL-PROVENANCE.json', 'dist/index.js', 'dist/index.d.ts',
   'dist/abi.js', 'dist/abi.d.ts', 'dist/epoch.js', 'dist/epoch.d.ts', 'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json', 'examples/DiceConsumer.sol', 'notices/CHAINLINK-LICENSE'];
 for (const name of required) assert(packed.files.some(f => f.path === name), `Missing ${name}`);
 for (const { path } of packed.files) {
-  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|epoch|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol|examples\/MiningRandomnessConsumer\.sol)|examples\/DiceConsumer\.sol|notices\/(?:CHAINLINK-LICENSE|PROVENANCE\.md)|scripts\/block-publish\.mjs|package\.json|README\.md|AGENTS\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json)$/.test(path), `Unexpected payload ${path}`);
+  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|epoch|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol|examples\/MiningRandomnessConsumer\.sol)|examples\/DiceConsumer\.sol|notices\/(?:CHAINLINK-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
 }
-assert.equal(JSON.parse(readFileSync(resolve(pkg, 'package.json'))).private, true);
-let guardBlocked = false;
-try { execFileSync(process.execPath, [resolve(pkg, 'scripts/block-publish.mjs')], { stdio: 'pipe' }); }
-catch (error) { guardBlocked = error.status !== 0 && error.stderr.toString().includes('SDK RELEASE BLOCKED'); }
-assert(guardBlocked, 'Publish guard must fail closed');
+const metadata = JSON.parse(readFileSync(resolve(pkg, 'package.json')));
+assert.notEqual(metadata.private, true);
+assert.equal(metadata.publishConfig.access, 'public');
+assert.equal(metadata.publishConfig.registry, 'https://registry.npmjs.org/');
 const temp = mkdtempSync(resolve(tmpdir(), 'd20dao-sdk-consumer-'));
 console.log(`Fresh consumer: ${temp}`);
 writeFileSync(resolve(temp, 'package.json'), JSON.stringify({ name: 'sdk-smoke-consumer', private: true, type: 'module', overrides: { solc: { tmp: '0.2.7' } } }));

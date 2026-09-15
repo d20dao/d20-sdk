@@ -1,0 +1,1 @@
+throw new Error("SDK RELEASE BLOCKED: keeper readiness and protocol review must be resolved, npm scope ownership verified, and the user must explicitly authorize a reviewed release. No environment variable bypass. See docs/sdk-release-checklist.md in the repository.");

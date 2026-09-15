@@ -1,0 +1,3 @@
+* text=auto eol=lf
+protocol/contracts/vendor/VRF.sol -text
+protocol/contracts/vendor/CHAINLINK-LICENSE -text -whitespace

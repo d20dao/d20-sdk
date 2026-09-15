@@ -1,0 +1,61 @@
+{
+  "name": "@arcdao/vrf-sdk",
+  "version": "0.1.0-alpha.0",
+  "description": "Public ArcDao VRF replay helpers and Solidity consumer starter sources (unreleased alpha)",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./abi": {
+      "types": "./dist/abi.d.ts",
+      "import": "./dist/abi.js"
+    },
+    "./abi/ArcVRFCoordinator.json": "./abi/ArcVRFCoordinator.json",
+    "./contracts/*": "./contracts/*",
+    "./examples/*": "./examples/*",
+    "./AGENTS.md": "./AGENTS.md"
+  },
+  "files": [
+    "dist/*.js",
+    "dist/*.d.ts",
+    "abi/ArcVRFCoordinator.json",
+    "contracts/**/*.sol",
+    "examples/*.sol",
+    "AGENTS.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "notices/*",
+    "BUILD-MANIFEST.json",
+    "scripts/block-publish.mjs"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
+    "prepublishOnly": "node scripts/block-publish.mjs",
+    "test": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "ethers": "6.17.0"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts": "5.6.1",
+    "@types/node": "24.10.0",
+    "esbuild": "0.28.2",
+    "solc": "0.8.28",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/d20dao/d20-sdk.git"
+  }
+}

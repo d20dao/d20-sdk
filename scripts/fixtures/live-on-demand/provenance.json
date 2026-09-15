@@ -1,0 +1,38 @@
+{
+  "sourceMode": "live API3",
+  "canonicalProtocolCommit": "8fe545a56aa8beea294a96b3ef3fd17a3f514b6b",
+  "traceSha256": "f2bac9893f82c1d91cc73d361df1a56de57fa312b165a5e871063c35d18b74a5",
+  "note": "Genuine live API3 signed responses, real Rust VRF proofs and actual isolated local-proxy-chain acceptance. Not a public-network deployment. Public source pin includes a later copyright-only update.",
+  "fixtures": {
+    "epoch-replay-1.json": {
+      "requestId": "1",
+      "epochId": "1",
+      "source": 1,
+      "fulfillmentTransactionHash": "0xea94c635792244ff5df26739b897e83a4c29a1339dee191e449730ebafc736e3"
+    },
+    "epoch-replay-3.json": {
+      "requestId": "3",
+      "epochId": "1",
+      "source": 1,
+      "fulfillmentTransactionHash": "0xbaf08ae88807f1942305407c12094deeef6b2b66a1909dbf180e0841414d7453"
+    },
+    "epoch-replay-4.json": {
+      "requestId": "4",
+      "epochId": "2",
+      "source": 0,
+      "fulfillmentTransactionHash": "0x463d79621371f658cc8f2f59cef1ba4addfb47640f222d39c9f33de2f17ceb2a"
+    },
+    "epoch-replay-7.json": {
+      "requestId": "7",
+      "epochId": "5",
+      "source": 2,
+      "fulfillmentTransactionHash": "0xe92e5f5a9d9f89e1fde4979b1daa9e7366f177498e129a202680a9e4525db3a2"
+    },
+    "epoch-replay-10.json": {
+      "requestId": "10",
+      "epochId": "8",
+      "source": 3,
+      "fulfillmentTransactionHash": "0x9ce46110563ff12424bfabcdd3838036a4932049074b62321aa77fb933ebd9f4"
+    }
+  }
+}

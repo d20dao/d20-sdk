@@ -1,9 +1,9 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "c10699c490c0dd6c7b5ccba7e704cb01fa8c86fa",
+  "sourceCommit": "8fe545a56aa8beea294a96b3ef3fd17a3f514b6b",
   "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
-    "LICENSE": "603f4139e9afa370040f1a6dd73b7450ea85790bd5115747865a4eb104a2d2bd",
+    "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
     "contracts/D20VRFConsumer.sol": "79e1e865141fdb377c3c5535206b4fced12487315ed6726e21c71ad88831153d",
     "contracts/D20VRFCoordinator.sol": "ea4f886c88e089f7561d63f65a66135b531c5baca20a3f40789729414c61279a",
     "contracts/examples/MiningRandomnessConsumer.sol": "0a5d573266dbd3e531464cb795901e0f0060b9f6fbf9c7a52853f722093eb6a5",

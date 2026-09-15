@@ -62,3 +62,7 @@ Builds use reviewed protocol Git blobs and verify every SHA-256 in PROTOCOL-PROV
 Fixture provenance distinguishes explicit CI signatures from actual API3 responses. Fixtures are not included in the package. The browser-target bundle is executed under Node, not an actual browser session; independently trusted chain context is still required for real verification.
 
 External review, provider quotas, actual chain fees/timing, upgrade administration, operational recovery and application refunds remain release gates. A healthy process alone does not guarantee a particular request's timely fulfillment. Keep the private flag and unconditional publish guard until a concrete release is authorized. Local validation does not authorize publishing or deployment.
+
+## Arc Testnet pilot
+
+A restricted pilot is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Consumer allowlisting is required. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA. SDK npm publication remains separate from this GitHub testnet release.

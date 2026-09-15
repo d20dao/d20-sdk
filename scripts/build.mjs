@@ -29,7 +29,7 @@ for (const name of ['.generated', 'dist', 'abi', 'contracts', 'notices']) {
   if (dirname(target) !== pkg) throw new Error('Unsafe generated output path');
   rmSync(target, { recursive: true, force: true });
 }
-const modules = ['index', 'mapping', 'verification', 'sources', 'snapshots', 'replay', 'source-catalog', 'compact-catalog', 'evidence'];
+const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'epoch'];
 for (const name of modules) {
   // Mechanical module-specifier conversion only; protocol implementation remains canonical in repo/src.
   put(`.generated/${name}.ts`, read(`src/${name}.ts`).replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.js$2'));
@@ -37,7 +37,7 @@ for (const name of modules) {
 const input = {
   language: 'Solidity', sources: {
     'contracts/ArcVRFCoordinator.sol': { content: read('contracts/ArcVRFCoordinator.sol') },
-    'contracts/EntropySnapshots.sol': { content: read('contracts/EntropySnapshots.sol') },
+    'contracts/EpochEntropy.sol': { content: read('contracts/EpochEntropy.sol') },
   },
   settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'cancun', outputSelection: { '*': { '*': ['abi'] } } },
 };
@@ -56,9 +56,9 @@ const errors = (output.errors ?? []).filter(e => e.severity === 'error');
 if (errors.length) throw new Error(errors.map(e => e.formattedMessage).join('\n'));
 const abi = output.contracts['contracts/ArcVRFCoordinator.sol'].ArcVRFCoordinator.abi;
 put('abi/ArcVRFCoordinator.json', JSON.stringify(abi, null, 2) + '\n');
-const snapshotAbi = output.contracts['contracts/EntropySnapshots.sol'].EntropySnapshots.abi;
-put('abi/EntropySnapshots.json', JSON.stringify(snapshotAbi, null, 2) + '\n');
-put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const snapshotAbi = ${JSON.stringify(snapshotAbi)} as const;\n`);
+const epochEntropyAbi = output.contracts['contracts/EpochEntropy.sol'].EpochEntropy.abi;
+put('abi/EpochEntropy.json', JSON.stringify(epochEntropyAbi, null, 2) + '\n');
+put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\n`);
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
   strict: true, skipLibCheck: false, declaration: true, rootDir: resolve(pkg, '.generated'), outDir: resolve(pkg, 'dist'), types: [], noEmitOnError: true };
 const program = ts.createProgram([...modules, 'abi'].map(n => resolve(pkg, `.generated/${n}.ts`)), options);
@@ -72,4 +72,4 @@ put('LICENSE', read('LICENSE'));
 put('notices/CHAINLINK-LICENSE', read('contracts/vendor/CHAINLINK-LICENSE'));
 put('notices/PROVENANCE.md', read('contracts/vendor/PROVENANCE.md'));
 put('BUILD-MANIFEST.json', JSON.stringify(manifest, null, 2) + '\n');
-console.log('Built public ESM/declarations, canonical coordinator/snapshot ABIs and five consumer Solidity sources.');
+console.log('Built public ESM/declarations, canonical coordinator/epoch registry ABIs and five consumer Solidity sources.');

@@ -19,8 +19,12 @@
       "types": "./dist/abi.d.ts",
       "import": "./dist/abi.js"
     },
+    "./epoch": {
+      "types": "./dist/epoch.d.ts",
+      "import": "./dist/epoch.js"
+    },
     "./abi/ArcVRFCoordinator.json": "./abi/ArcVRFCoordinator.json",
-    "./abi/EntropySnapshots.json": "./abi/EntropySnapshots.json",
+    "./abi/EpochEntropy.json": "./abi/EpochEntropy.json",
     "./contracts/*": "./contracts/*",
     "./examples/*": "./examples/*",
     "./AGENTS.md": "./AGENTS.md"
@@ -28,8 +32,6 @@
   "files": [
     "dist/*.js",
     "dist/*.d.ts",
-    "abi/ArcVRFCoordinator.json",
-    "abi/EntropySnapshots.json",
     "contracts/**/*.sol",
     "examples/*.sol",
     "AGENTS.md",
@@ -37,7 +39,9 @@
     "THIRD_PARTY_NOTICES.md",
     "notices/*",
     "BUILD-MANIFEST.json",
-    "scripts/block-publish.mjs"
+    "scripts/block-publish.mjs",
+    "abi/ArcVRFCoordinator.json",
+    "abi/EpochEntropy.json"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",

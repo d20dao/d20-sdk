@@ -13,7 +13,7 @@ library RandomnessMapping {
         uint32 population;
     }
     struct Stream { bytes32 randomness; uint256 cursor; }
-    bytes32 internal constant MAP_DOMAIN = keccak256("VRF_ARCDAO_MAP_V1");
+    bytes32 internal constant MAP_DOMAIN = keccak256("D20_MAP");
     uint32 internal constant MAX_ITEMS = 256;
     uint32 internal constant MAX_DICE = 128;
     error InvalidMapping();

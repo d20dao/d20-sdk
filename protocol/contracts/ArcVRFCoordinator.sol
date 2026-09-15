@@ -2,10 +2,10 @@
 pragma solidity 0.8.28;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {EpochEntropy} from "./EpochEntropy.sol";
 import {VRF} from "./vendor/VRF.sol";
 import {IArcVRF, IArcVRFConsumer} from "./interfaces/IArcVRF.sol";
 import {RandomnessMapping} from "./libraries/RandomnessMapping.sol";
-import {EntropySources} from "./EntropySources.sol";
 
 /// @notice Single-operator secp256k1 VRF. Proof submission and callback retries are permissionless.
 /// @dev Prototype: not audited or validated on Arc. No operator can replace a fixed result,
@@ -14,12 +14,13 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     uint32 public constant MIN_CALLBACK_GAS = 30_000;
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
     uint64 public constant RESPONSE_TIMEOUT = 60 seconds;
-    uint256 public constant MAX_EVIDENCE_PACKET_BYTES = 1024;
+    uint256 public constant MAX_EVIDENCE_PACKET_BYTES = 512;
     uint256 private constant CALLBACK_RESERVE = 60_000;
-    bytes32 public constant SEED_DOMAIN = keccak256("VRF_ARCDAO_SEED_V2");
-    bytes32 public constant TRANSCRIPT_DOMAIN = keccak256("VRF_ARCDAO_TRANSCRIPT_V1");
-    EntropySources public immutable entropySources;
-    bytes32 public immutable sourceConfigurationHash;
+    bytes32 public constant SEED_DOMAIN = keccak256("D20_VRF_SEED");
+    bytes32 public constant TRANSCRIPT_DOMAIN = keccak256("D20_VRF_TRANSCRIPT");
+    bytes32 public constant CONFIG_DOMAIN = keccak256("D20_VRF_CONFIG");
+    bytes32 public immutable protocolConfigurationHash;
+    EpochEntropy public immutable epochRegistry;
 
     uint256 public immutable publicKeyX;
     uint256 public immutable publicKeyY;
@@ -46,11 +47,12 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         bytes32 blockHash;
         bytes32 randomness;
         bytes32 proofHash;
-        bytes32 apiDataHash;
         bytes32 transcriptHash;
         bool fulfilled;
         bool delivered;
         bool refunded;
+        uint64 epochId;
+        bytes32 epochHash;
     }
     /// @dev Same public Request ABI, but pack three status flags into the existing deadline/refund slot.
     struct StoredRequest {
@@ -67,19 +69,14 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         bytes32 blockHash;
         bytes32 randomness;
         bytes32 proofHash;
-        bytes32 apiDataHash;
         bytes32 transcriptHash;
+        uint64 epochId;
+        bytes32 epochHash;
     }
     mapping(uint256 => StoredRequest) private requests;
     mapping(uint256 => RandomnessMapping.Spec) private mappingSpecs;
-    struct ApiEvidence {
-        EntropySources.Source source;
-        bytes32 queryHash;
-        bytes32 dataHash;
-        bytes32 attestationHash;
-    }
-
     error InvalidConfig();
+    error EpochUnavailable();
     error InvalidPublicKey();
     error ContractConsumerRequired();
     error IncorrectFee(uint256 expected, uint256 actual);
@@ -116,17 +113,14 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     event RefundCreditWithdrawn(address indexed owner, address indexed recipient, uint256 amount);
     event MappingRequested(uint256 indexed requestId, bytes32 indexed mappingHash, RandomnessMapping.Spec spec);
     event ProofVerified(uint256 indexed requestId, bytes32 indexed keyHash, uint256 seed, bytes32 proofHash);
-    event ApiEvidenceVerified(uint256 indexed requestId, EntropySources.Source indexed source,
-        bytes32 requestHash, bytes32 dataHash, bytes32 attestationHash, bytes32 transcriptHash);
     event RequestServed(uint256 indexed requestId, uint256 indexed serveIndex);
     /// @dev Packet is NON-indexed so it is recoverable from logs, even through wrappers/multicalls.
     event FulfillmentEvidence(uint256 indexed requestId, bytes32 indexed transcriptHash, bytes packet);
 
-    constructor(uint256[2] memory publicKey, address recipient, uint256 fee, uint16 confirmations, EntropySources sources) {
+    constructor(uint256[2] memory publicKey, address recipient, uint256 fee, uint16 confirmations, EpochEntropy registry) {
         if (recipient == address(0) || confirmations == 0 || confirmations > 64) revert InvalidConfig();
-        if (address(sources).code.length == 0) revert InvalidConfig();
-        entropySources = sources;
-        sourceConfigurationHash = sources.configurationHash();
+        if (address(registry).code.length == 0) revert InvalidConfig();
+        epochRegistry = registry;
         if (!_isOnCurve(publicKey)) revert InvalidPublicKey();
         publicKeyX = publicKey[0];
         publicKeyY = publicKey[1];
@@ -134,6 +128,7 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         feeRecipient = recipient;
         requestFee = fee;
         confirmationBlocks = confirmations;
+        protocolConfigurationHash = keccak256(abi.encode(CONFIG_DOMAIN, publicKey, recipient, fee, confirmations, address(registry), registry.catalogHash(), registry.firstEpochStart(), uint64(200)));
     }
 
     function requestRandomness(bytes32 clientSeed, uint32 callbackGasLimit, address _refundAddress)
@@ -157,12 +152,17 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         if (_refundAddress == address(0)) revert InvalidRefundAddress();
         _checkGasLimit(callbackGasLimit);
         RandomnessMapping.validate(spec);
+        uint64 epochId = epochRegistry.epochForBlock(block.number);
+        EpochEntropy.Epoch memory epoch = epochRegistry.getEpoch(epochId);
+        if (epochId == 0 || epoch.epochHash == bytes32(0)) revert EpochUnavailable();
         requestId = nextRequestId++;
         // The request's own block hash is only available once that block has completed.
         // No keeper-supplied block number/hash, gas measurement or source selector is accepted.
         uint64 target = uint64(block.number);
         uint64 deadline = uint64(block.timestamp + RESPONSE_TIMEOUT);
         StoredRequest storage r = requests[requestId];
+        r.epochId = epochId;
+        r.epochHash = epoch.epochHash;
         r.consumer = msg.sender;
         r.callbackGasLimit = callbackGasLimit;
         r.targetBlock = target;
@@ -188,16 +188,17 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         result.blockHash = r.blockHash;
         result.randomness = r.randomness;
         result.proofHash = r.proofHash;
-        result.apiDataHash = r.apiDataHash;
         result.transcriptHash = r.transcriptHash;
         result.fulfilled = r.fulfilled;
         result.delivered = r.delivered;
         result.refunded = r.refunded;
+        result.epochId = r.epochId;
+        result.epochHash = r.epochHash;
     }
 
     /// @notice Recovery scan over REQUEST IDs, not completion order. Never skips an older unserved gap.
     /// @dev Scans at most limit slots; expired/refunded/fulfilled jobs are excluded. Keeper must recheck
-    ///      state/time before API/prover/send. Start at 1 after loss of local state; paginate until nextRequestId.
+    ///      state/time before prover/send. Start at 1 after loss of local state; paginate until nextRequestId.
     function getPendingRequestIds(uint256 fromId, uint256 limit)
         external view returns (uint256[] memory ids, uint256 nextCursor)
     {
@@ -236,18 +237,12 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
 
     /// @notice Verify the VRF math without mutating state. A valid proof is NOT evidence of timely acceptance.
     /// @dev Check getRequest().fulfilled, proofHash and events separately for accepted-service status.
-    function verifyRequestProof(uint256 requestId, Proof calldata proof, EntropySources.Attestation calldata apiProof)
+    function verifyRequestProof(uint256 requestId, Proof calldata proof)
         external view returns (bytes32)
     {
         StoredRequest storage r = _request(requestId);
         bytes32 anchor = _resolvedBlockHash(r);
-        ApiEvidence memory e = _verifyApi(requestId, r, anchor, apiProof);
-        return _verifyProof(proof, _seed(requestId, r, anchor, e.queryHash, e.dataHash));
-    }
-
-    function getSourceSelection(uint256 requestId) external view returns (EntropySources.Selection memory) {
-        StoredRequest storage r = _request(requestId);
-        return entropySources.select(requestId, _resolvedBlockHash(r), r.deadline - RESPONSE_TIMEOUT);
+        return _verifyProof(proof, _seed(requestId, r, anchor));
     }
 
     /// @notice Cache a canonical block hash before BLOCKHASH's 256-block window expires.
@@ -257,14 +252,21 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     }
 
     /// @notice Exact input the keeper must prove. Never accept an RPC-supplied hash as authority.
-    function requestSeed(uint256 requestId, EntropySources.Attestation calldata apiProof) external view returns (uint256) {
+    function requestSeed(uint256 requestId) external view returns (uint256) {
         StoredRequest storage r = _request(requestId);
         bytes32 anchor = _resolvedBlockHash(r);
-        ApiEvidence memory e = _verifyApi(requestId, r, anchor, apiProof);
-        return _seed(requestId, r, anchor, e.queryHash, e.dataHash);
+        return _seed(requestId, r, anchor);
     }
 
-    function fulfillRandomness(uint256 requestId, Proof calldata proof, EntropySources.Attestation calldata apiProof)
+    /// @notice Canonical proof input and service status in a single read; verification itself remains timeless.
+    function getProofContext(uint256 requestId)
+        external view returns (uint256 seed, uint64 deadline, bool fulfilled, bool refunded)
+    {
+        StoredRequest storage r = _request(requestId);
+        return (_seed(requestId, r, _resolvedBlockHash(r)), r.deadline, r.fulfilled, r.refunded);
+    }
+
+    function fulfillRandomness(uint256 requestId, Proof calldata proof)
         external nonReentrant
     {
         StoredRequest storage r = _request(requestId);
@@ -272,26 +274,23 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         if (r.refunded) revert RequestRefunded();
         if (block.timestamp > r.deadline) revert RequestExpired();
         bytes32 anchor = _storeBlockHash(requestId, r);
-        ApiEvidence memory e = _verifyApi(requestId, r, anchor, apiProof);
-        bytes32 randomness = _verifyProof(proof, _seed(requestId, r, anchor, e.queryHash, e.dataHash));
+        bytes32 randomness = _verifyProof(proof, _seed(requestId, r, anchor));
         r.randomness = randomness;
         r.proofHash = keccak256(abi.encode(proof));
-        r.apiDataHash = e.dataHash;
-        r.transcriptHash = _transcriptHash(requestId, r, anchor, e);
+        r.transcriptHash = _transcriptHash(requestId, r, anchor);
         r.fulfilled = true;
         earnedFees += requestFee;
         lastServedRequestId = requestId;
         servedRequestAt[++lastServedIndex] = requestId;
         emit RequestServed(requestId, lastServedIndex);
         emit ProofVerified(requestId, keyHash, proof.seed, r.proofHash);
-        emit ApiEvidenceVerified(requestId, e.source, e.queryHash, e.dataHash, e.attestationHash, r.transcriptHash);
         emit RandomnessFulfilled(requestId, randomness, msg.sender);
-        _emitEvidence(requestId, r.transcriptHash, proof, apiProof);
+        _emitEvidence(requestId, r.transcriptHash, proof);
         _deliver(requestId, r, r.callbackGasLimit);
     }
 
-    function _emitEvidence(uint256 id, bytes32 transcript, Proof calldata proof, EntropySources.Attestation calldata apiProof) private {
-        bytes memory packet = abi.encode(uint16(1), proof, apiProof);
+    function _emitEvidence(uint256 id, bytes32 transcript, Proof calldata proof) private {
+        bytes memory packet = abi.encode(proof);
         if (packet.length > MAX_EVIDENCE_PACKET_BYTES) revert EvidencePacketTooLarge();
         emit FulfillmentEvidence(id, transcript, packet);
     }
@@ -370,13 +369,12 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         }
     }
 
-    function _seed(uint256 id, StoredRequest storage r, bytes32 blockHash_, bytes32 queryHash, bytes32 dataHash)
+    function _seed(uint256 id, StoredRequest storage r, bytes32 blockHash_)
         private view returns (uint256)
     {
         return uint256(keccak256(abi.encode(
             SEED_DOMAIN, block.chainid, address(this), keyHash, id,
-            r.consumer, r.clientSeed, r.mappingHash, r.targetBlock, blockHash_,
-            sourceConfigurationHash, queryHash, dataHash
+            r.consumer, r.clientSeed, r.mappingHash, r.targetBlock, blockHash_, r.epochId, r.epochHash
         )));
     }
 
@@ -389,19 +387,12 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         return bytes32(_randomValueFromVRFProof(proof, seed));
     }
 
-    function _verifyApi(uint256 id, StoredRequest storage r, bytes32 anchor, EntropySources.Attestation calldata a)
-        private view returns (ApiEvidence memory e)
-    {
-        (e.source, e.queryHash, e.dataHash, e.attestationHash) =
-            entropySources.verify(id, anchor, r.deadline - RESPONSE_TIMEOUT, r.deadline, a);
-    }
-
-    function _transcriptHash(uint256 id, StoredRequest storage r, bytes32 anchor, ApiEvidence memory e)
+    function _transcriptHash(uint256 id, StoredRequest storage r, bytes32 anchor)
         private view returns (bytes32)
     {
         return keccak256(abi.encode(
-            TRANSCRIPT_DOMAIN, block.chainid, address(this), id, sourceConfigurationHash,
-            anchor, e.queryHash, e.dataHash, e.attestationHash, r.proofHash, r.randomness, r.mappingHash
+            TRANSCRIPT_DOMAIN, block.chainid, address(this), id, protocolConfigurationHash,
+            anchor, r.proofHash, r.randomness, r.mappingHash, r.epochId, r.epochHash
         ));
     }
 

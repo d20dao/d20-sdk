@@ -4,7 +4,7 @@ export const Operation = { Raw: 0, DiceRoll: 1, CoinFlip: 2, NumberRange: 3, Cho
 export interface MappingSpec { operation: number; lower: bigint; upper: bigint; count: number; population: number; }
 const MAX = (1n << 256n) - 1n;
 const abi = AbiCoder.defaultAbiCoder();
-const MAP_DOMAIN = id("VRF_ARCDAO_MAP_V1");
+const MAP_DOMAIN = id("D20_MAP");
 function spec(operation: number, lower = 0n, upper = 0n, count = 1, population = 0): MappingSpec {
   const result = { operation, lower, upper, count, population };
   validateMapping(result);

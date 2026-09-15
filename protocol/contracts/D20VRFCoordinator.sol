@@ -2,33 +2,40 @@
 pragma solidity 0.8.28;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EpochEntropy} from "./EpochEntropy.sol";
 import {VRF} from "./vendor/VRF.sol";
-import {IArcVRF, IArcVRFConsumer} from "./interfaces/IArcVRF.sol";
+import {ID20VRF, ID20VRFConsumer} from "./interfaces/ID20VRF.sol";
 import {RandomnessMapping} from "./libraries/RandomnessMapping.sol";
 
 /// @notice Single-operator secp256k1 VRF. Proof submission and callback retries are permissionless.
-/// @dev Prototype: not audited or validated on Arc. No operator can replace a fixed result,
+/// @dev Prototype: not audited or validated on Arc. Operational setters cannot replace a fixed result; the upgrade owner is trusted,
 ///      but the secret-key holder can withhold it. Expired requests refund; never reroll automatically.
-contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
+contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgradeable, UUPSUpgradeable {
     uint32 public constant MIN_CALLBACK_GAS = 30_000;
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
     uint64 public constant RESPONSE_TIMEOUT = 60 seconds;
     uint256 public constant MAX_EVIDENCE_PACKET_BYTES = 512;
-    uint256 private constant CALLBACK_RESERVE = 60_000;
+    uint256 private constant CALLBACK_RESERVE = 140_000;
     bytes32 public constant SEED_DOMAIN = keccak256("D20_VRF_SEED");
     bytes32 public constant TRANSCRIPT_DOMAIN = keccak256("D20_VRF_TRANSCRIPT");
     bytes32 public constant CONFIG_DOMAIN = keccak256("D20_VRF_CONFIG");
-    bytes32 public immutable protocolConfigurationHash;
-    EpochEntropy public immutable epochRegistry;
+    bytes32 public protocolConfigurationHash;
+    EpochEntropy public epochRegistry;
 
-    uint256 public immutable publicKeyX;
-    uint256 public immutable publicKeyY;
-    bytes32 public immutable keyHash;
-    address public immutable feeRecipient;
-    uint256 public immutable requestFee;
-    uint16 public immutable confirmationBlocks;
-    uint256 public nextRequestId = 1;
+    uint256 public publicKeyX;
+    uint256 public publicKeyY;
+    bytes32 public keyHash;
+    // Replay uses the initial value bound into the initialized configuration hash.
+    address public initialFeeRecipient;
+    address public feeRecipient;
+    uint16 public keeperFeeBps;
+    mapping(address => uint256) public keeperCredits;
+    uint256 public totalKeeperCredits;
+    uint256 public requestFee;
+    uint16 public confirmationBlocks;
+    uint256 public nextRequestId;
     uint256 public earnedFees;
     uint256 public lastServedRequestId;
     uint256 public lastServedIndex;
@@ -39,6 +46,7 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     struct Request {
         address consumer;
         uint32 callbackGasLimit;
+        uint64 requestBlock;
         uint64 targetBlock;
         uint64 deadline;
         address refundAddress;
@@ -58,6 +66,7 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     struct StoredRequest {
         address consumer;
         uint32 callbackGasLimit;
+        uint64 requestBlock;
         uint64 targetBlock;
         uint64 deadline;
         address refundAddress;
@@ -75,6 +84,8 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     }
     mapping(uint256 => StoredRequest) private requests;
     mapping(uint256 => RandomnessMapping.Spec) private mappingSpecs;
+    // Preserve declared fields, packing and mapping value layouts across upgrades.
+    uint256[40] private __gap;
     error InvalidConfig();
     error EpochUnavailable();
     error InvalidPublicKey();
@@ -97,18 +108,23 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     error RequestRefunded();
     error RefundNotAvailable();
     error NoRefundCredit();
+    error NoKeeperCredit();
     error InvalidScan();
     error EvidencePacketTooLarge();
 
     event RandomnessRequested(
         uint256 indexed requestId, address indexed consumer, bytes32 indexed keyHash,
-        bytes32 clientSeed, uint64 targetBlock, uint32 callbackGasLimit, uint256 feePaid,
+        bytes32 clientSeed, uint64 requestBlock, uint32 callbackGasLimit, uint256 feePaid,
         address refundAddress, uint64 deadline
     );
     event BlockHashStored(uint256 indexed requestId, uint64 targetBlock, bytes32 blockHash);
     event RandomnessFulfilled(uint256 indexed requestId, bytes32 randomness, address indexed submitter);
     event CallbackAttempted(uint256 indexed requestId, bool success, uint32 gasLimit);
     event FeesWithdrawn(address indexed recipient, uint256 amount);
+    event FeeRecipientChanged(address indexed previousRecipient, address indexed newRecipient);
+    event KeeperFeeBpsChanged(uint16 previousBps, uint16 newBps);
+    event KeeperFeePaid(uint256 indexed requestId, address indexed keeper, uint256 amount, bool paid);
+    event KeeperCreditWithdrawn(address indexed keeper, address indexed recipient, uint256 amount);
     event RequestRefundedTo(uint256 indexed requestId, address indexed refundAddress, uint256 amount, bool paid);
     event RefundCreditWithdrawn(address indexed owner, address indexed recipient, uint256 amount);
     event MappingRequested(uint256 indexed requestId, bytes32 indexed mappingHash, RandomnessMapping.Spec spec);
@@ -117,8 +133,15 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     /// @dev Packet is NON-indexed so it is recoverable from logs, even through wrappers/multicalls.
     event FulfillmentEvidence(uint256 indexed requestId, bytes32 indexed transcriptHash, bytes packet);
 
-    constructor(uint256[2] memory publicKey, address recipient, uint256 fee, uint16 confirmations, EpochEntropy registry) {
-        if (recipient == address(0) || confirmations == 0 || confirmations > 64) revert InvalidConfig();
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() { _disableInitializers(); }
+    // OZ 5.6's namespaced ReentrancyGuard is constructor-independent: this modifier
+    // sets the proxy's guard to NOT_ENTERED on completion without duplicating its slot.
+    function initialize(uint256[2] memory publicKey, address initialOwner, address recipient, uint256 fee, uint16 confirmations, EpochEntropy registry, uint16 keeperBps) external initializer nonReentrant {
+        __Ownable_init(initialOwner);
+        __Ownable2Step_init();
+        nextRequestId=1;
+        if (recipient == address(0) || confirmations == 0 || confirmations > 64 || keeperBps > 10000) revert InvalidConfig();
         if (address(registry).code.length == 0) revert InvalidConfig();
         epochRegistry = registry;
         if (!_isOnCurve(publicKey)) revert InvalidPublicKey();
@@ -126,9 +149,22 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         publicKeyY = publicKey[1];
         keyHash = keccak256(abi.encode(publicKey));
         feeRecipient = recipient;
+        initialFeeRecipient = recipient;
+        keeperFeeBps = keeperBps;
         requestFee = fee;
         confirmationBlocks = confirmations;
         protocolConfigurationHash = keccak256(abi.encode(CONFIG_DOMAIN, publicKey, recipient, fee, confirmations, address(registry), registry.catalogHash(), registry.firstEpochStart(), uint64(200)));
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function setFeeRecipient(address next) external onlyOwner {
+        if(next == address(0)) revert InvalidConfig();
+        emit FeeRecipientChanged(feeRecipient,next); feeRecipient=next;
+    }
+    function setKeeperFeeBps(uint16 next) external onlyOwner {
+        if(next > 10000) revert InvalidConfig();
+        emit KeeperFeeBpsChanged(keeperFeeBps,next); keeperFeeBps=next;
     }
 
     function requestRandomness(bytes32 clientSeed, uint32 callbackGasLimit, address _refundAddress)
@@ -154,25 +190,24 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         RandomnessMapping.validate(spec);
         uint64 epochId = epochRegistry.epochForBlock(block.number);
         EpochEntropy.Epoch memory epoch = epochRegistry.getEpoch(epochId);
-        if (epochId == 0 || epoch.epochHash == bytes32(0)) revert EpochUnavailable();
+        if (epochId == 0) revert EpochUnavailable();
+        epochRegistry.checkpointEpoch(epochId);
         requestId = nextRequestId++;
-        // The request's own block hash is only available once that block has completed.
-        // No keeper-supplied block number/hash, gas measurement or source selector is accepted.
-        uint64 target = uint64(block.number);
-        uint64 deadline = uint64(block.timestamp + RESPONSE_TIMEOUT);
+        // An unpublished epoch cannot choose data after the randomness block is known.
         StoredRequest storage r = requests[requestId];
         r.epochId = epochId;
         r.epochHash = epoch.epochHash;
         r.consumer = msg.sender;
         r.callbackGasLimit = callbackGasLimit;
-        r.targetBlock = target;
-        r.deadline = deadline;
+        r.requestBlock = uint64(block.number);
+        r.targetBlock = epoch.epochHash == bytes32(0) ? 0 : _target(r.requestBlock,epoch.committedBlock);
+        r.deadline = uint64(block.timestamp + RESPONSE_TIMEOUT);
         r.refundAddress = _refundAddress;
         r.clientSeed = clientSeed;
         r.mappingHash = RandomnessMapping.hash(spec);
         mappingSpecs[requestId] = spec;
-        emit RandomnessRequested(requestId, msg.sender, keyHash, clientSeed, target, callbackGasLimit,
-            msg.value, _refundAddress, deadline);
+        emit RandomnessRequested(requestId, msg.sender, keyHash, clientSeed, r.requestBlock, callbackGasLimit,
+            msg.value, _refundAddress, r.deadline);
         emit MappingRequested(requestId, r.mappingHash, spec);
     }
 
@@ -180,7 +215,8 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         StoredRequest storage r = _request(requestId);
         result.consumer = r.consumer;
         result.callbackGasLimit = r.callbackGasLimit;
-        result.targetBlock = r.targetBlock;
+        result.requestBlock = r.requestBlock;
+        (result.targetBlock,result.epochHash)=_resolvedEpoch(r);
         result.deadline = r.deadline;
         result.refundAddress = r.refundAddress;
         result.clientSeed = r.clientSeed;
@@ -193,7 +229,7 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         result.delivered = r.delivered;
         result.refunded = r.refunded;
         result.epochId = r.epochId;
-        result.epochHash = r.epochHash;
+
     }
 
     /// @notice Recovery scan over REQUEST IDs, not completion order. Never skips an older unserved gap.
@@ -279,7 +315,10 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         r.proofHash = keccak256(abi.encode(proof));
         r.transcriptHash = _transcriptHash(requestId, r, anchor);
         r.fulfilled = true;
-        earnedFees += requestFee;
+        // Never pay the proof submitter: anyone may submit the fixed proof.
+        address keeper = epochRegistry.committer();
+        uint256 keeperAmount = requestFee / 10000 * keeperFeeBps + requestFee % 10000 * keeperFeeBps / 10000;
+        earnedFees += requestFee - keeperAmount;
         lastServedRequestId = requestId;
         servedRequestAt[++lastServedIndex] = requestId;
         emit RequestServed(requestId, lastServedIndex);
@@ -287,6 +326,12 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         emit RandomnessFulfilled(requestId, randomness, msg.sender);
         _emitEvidence(requestId, r.transcriptHash, proof);
         _deliver(requestId, r, r.callbackGasLimit);
+        if(keeperAmount != 0) {
+            bool paid;
+            assembly ("memory-safe") { paid := call(30000, keeper, keeperAmount, 0, 0, 0, 0) }
+            if(!paid) { keeperCredits[keeper] += keeperAmount; totalKeeperCredits += keeperAmount; }
+            emit KeeperFeePaid(requestId,keeper,keeperAmount,paid);
+        }
     }
 
     function _emitEvidence(uint256 id, bytes32 transcript, Proof calldata proof) private {
@@ -349,20 +394,43 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
         emit FeesWithdrawn(recipient, amount);
     }
 
+    function withdrawKeeperCredit(address payable recipient) external nonReentrant {
+        if(recipient == address(0)) revert InvalidConfig();
+        uint256 amount = keeperCredits[msg.sender];
+        if(amount == 0) revert NoKeeperCredit();
+        keeperCredits[msg.sender] = 0;
+        totalKeeperCredits -= amount;
+        (bool success,) = recipient.call{value:amount}("");
+        if(!success) revert TransferFailed();
+        emit KeeperCreditWithdrawn(msg.sender,recipient,amount);
+    }
+
     function _request(uint256 requestId) private view returns (StoredRequest storage r) {
         r = requests[requestId];
         if (r.consumer == address(0)) revert UnknownRequest();
     }
 
+    function _target(uint64 requestBlock,uint64 committedBlock) private pure returns(uint64) {
+        uint64 future=committedBlock+1;
+        return requestBlock>future?requestBlock:future;
+    }
+    function _resolvedEpoch(StoredRequest storage r) private view returns(uint64 target,bytes32 epochHash) {
+        if(r.epochHash!=bytes32(0)) return (r.targetBlock,r.epochHash);
+        EpochEntropy.Epoch memory epoch=epochRegistry.getEpoch(r.epochId);
+        if(epoch.epochHash==bytes32(0)) return (0,bytes32(0));
+        return (_target(r.requestBlock,epoch.committedBlock),epoch.epochHash);
+    }
     function _resolvedBlockHash(StoredRequest storage r) private view returns (bytes32 value) {
-        if (block.number < uint256(r.targetBlock) + confirmationBlocks) revert NotReady();
+        (uint64 target,bytes32 epochHash)=_resolvedEpoch(r);
+        if (epochHash==bytes32(0)||block.number < uint256(target) + confirmationBlocks) revert NotReady();
         value = r.blockHash;
-        if (value == bytes32(0)) value = blockhash(r.targetBlock);
+        if (value == bytes32(0)) value = blockhash(target);
         if (value == bytes32(0)) revert BlockHashUnavailable();
     }
 
     function _storeBlockHash(uint256 id, StoredRequest storage r) private returns (bytes32 value) {
         value = _resolvedBlockHash(r);
+        (r.targetBlock,r.epochHash)=_resolvedEpoch(r);
         if (r.blockHash == bytes32(0)) {
             r.blockHash = value;
             emit BlockHashStored(id, r.targetBlock, value);
@@ -372,9 +440,10 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     function _seed(uint256 id, StoredRequest storage r, bytes32 blockHash_)
         private view returns (uint256)
     {
+        (uint64 target,bytes32 epochHash)=_resolvedEpoch(r);
         return uint256(keccak256(abi.encode(
             SEED_DOMAIN, block.chainid, address(this), keyHash, id,
-            r.consumer, r.clientSeed, r.mappingHash, r.targetBlock, blockHash_, r.epochId, r.epochHash
+            r.consumer, r.clientSeed, r.mappingHash, r.requestBlock, target, blockHash_, r.epochId, epochHash
         )));
     }
 
@@ -401,7 +470,7 @@ contract ArcVRFCoordinator is VRF, ReentrancyGuard, IArcVRF {
     }
 
     function _deliver(uint256 id, StoredRequest storage r, uint32 gasLimit) private {
-        bytes memory data = abi.encodeCall(IArcVRFConsumer.rawFulfillRandomness, (id, r.randomness));
+        bytes memory data = abi.encodeCall(ID20VRFConsumer.rawFulfillRandomness, (id, r.randomness));
         address consumer = r.consumer;
         // Warm account access before the EIP-150 budget check. Do not mark an empty address delivered.
         if (consumer.code.length == 0) {

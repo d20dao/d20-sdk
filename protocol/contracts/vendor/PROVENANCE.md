@@ -8,4 +8,4 @@
 - License: MIT as declared in the source. The upstream root license is preserved in `CHAINLINK-LICENSE` (including notices for upstream components not vendored here).
 - Modifications: none. `npm run vendor:check` verifies the original bytes.
 
-This is the Chainlink secp256k1/Keccak VRF construction described in that source, with its documented differences from the referenced IETF draft. It is not advertised as RFC 9381 wire-format interoperability. Reusing this file neither makes ArcDao a Chainlink service nor extends any upstream audit to our coordinator, mapping, consumer or keeper.
+This is the Chainlink secp256k1/Keccak VRF construction described in that source, with its documented differences from the referenced IETF draft. It is not advertised as RFC 9381 wire-format interoperability. Reusing this file neither makes D20DAO a Chainlink service nor extends any upstream audit to our coordinator, mapping, consumer or keeper.

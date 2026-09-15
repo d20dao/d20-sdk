@@ -1,25 +1,26 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "dcca615b3e07f273e45fa5596f80b63da241896a",
-  "note": "Public protocol files copied byte-for-byte from canonical committed Git blobs. Four ordered recipe slots; keeper operations and test fixtures are not distributed.",
+  "sourceCommit": "c10699c490c0dd6c7b5ccba7e704cb01fa8c86fa",
+  "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "603f4139e9afa370040f1a6dd73b7450ea85790bd5115747865a4eb104a2d2bd",
-    "contracts/ArcVRFConsumer.sol": "ad2ab4d777b5490cf75418a7030c097bf833540f2c4ab3b40001dac73386e6c3",
-    "contracts/ArcVRFCoordinator.sol": "05c2688e0d82c1f1da7df3a919ad03f7f31151b220195cddfa1b160acf85fb14",
-    "contracts/examples/MiningRandomnessConsumer.sol": "7c1d9bc826a46f71622ca972eb1021e58a7c21020000ca74c79c3516e8cc78c7",
-    "contracts/interfaces/IArcVRF.sol": "c79825298ddb6151ec5571e8f8b5709f4c4b302eee82634b633b248b0923e661",
-    "contracts/libraries/ArcVRFRequests.sol": "5ba4d4b2ac974b3b232bb020f6e814388e743d5c941b81773603477a1dfa828e",
+    "contracts/D20VRFConsumer.sol": "79e1e865141fdb377c3c5535206b4fced12487315ed6726e21c71ad88831153d",
+    "contracts/D20VRFCoordinator.sol": "ea4f886c88e089f7561d63f65a66135b531c5baca20a3f40789729414c61279a",
+    "contracts/examples/MiningRandomnessConsumer.sol": "0a5d573266dbd3e531464cb795901e0f0060b9f6fbf9c7a52853f722093eb6a5",
+    "contracts/interfaces/ID20VRF.sol": "a851253a4a62b245d4fb3dae9a73adf746670e5f509c6ca25321192f2d6bca8b",
+    "contracts/libraries/D20VRFRequests.sol": "8f0ee77eefd45d0667f9cd67f2db149850cd1f0da3bf5133335f8323cd5ea6d4",
     "contracts/libraries/RandomnessMapping.sol": "00bce68c1a6d89903d72d1c3f9ee5e1a56392188ed29b6aa32ab7451ef180c91",
     "contracts/vendor/CHAINLINK-LICENSE": "25a502f8fd39602de8a98cc4835a4bf81851b095d6f2c5c130bf0863afac6c99",
-    "contracts/vendor/PROVENANCE.md": "42064bd2d3a18d64a93cfa3aa52facb4d2ff6e201e7a7dfdbb0066c091e8c570",
+    "contracts/vendor/PROVENANCE.md": "e6da392378851c47574ef808c9c7e17dea50054ffd0cae7a9070f76f8eed60f2",
     "contracts/vendor/VRF.sol": "98e0345fd2dd42178cad4ad16dd8b18621112078d63d0c64839c8bd01c539350",
     "src/evidence.ts": "81b6a1446b9700ec545e794b08d356411608aa655e6030cdfabd1dfa531ef457",
     "src/index.ts": "6c23d8e952dfe4b7cd08cbd36f2e4bf6f434ebfc408c602038bc678b2ba4e174",
     "src/mapping.ts": "76aa6093d55831052b56e177fc394ef6ef14183a8ab8ca6fcc2c9382efb6b83f",
     "src/replay.ts": "c97a5081e785e6a7f27987e2d4c4d9861fe8fa8cbc775b0152e337141d3d48d7",
     "src/sources.ts": "d8566e7809c67dc51acab3b58fc93d734d098c2eabbaf3657ac910affe12e31e",
-    "src/verification.ts": "995636cd067d0ee020b272f2146fa0964aac8a23e829856a8c644ea17aa49f9e",
-    "src/epoch.ts": "84c1dccf5d5bf38ce5a5e237b3fdb17eb1f5d6a92e46ffd206c49415d1c0abc6",
-    "contracts/EpochEntropy.sol": "3eb967d84d1eb7882a993898fc35822c890e6c09f0447d64a40791fa841b8ba5"
+    "src/verification.ts": "754e39554c0c432cf1404741503f66b4199b84f39003d8e42f300a7256ffaa6a",
+    "src/epoch.ts": "2e49f7906d55d9edc144ae4ee142608d5629bc68d6596d0f4f424ebaa62d823a",
+    "contracts/EpochEntropy.sol": "23fd4d040a6f3800a6edf8f9ace1c251f47975728b9a86d7874cd0bc7abe9972",
+    "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286"
   }
 }

@@ -36,14 +36,15 @@ for (const name of modules) {
 }
 const input = {
   language: 'Solidity', sources: {
-    'contracts/ArcVRFCoordinator.sol': { content: read('contracts/ArcVRFCoordinator.sol') },
+    'contracts/D20VRFCoordinator.sol': { content: read('contracts/D20VRFCoordinator.sol') },
     'contracts/EpochEntropy.sol': { content: read('contracts/EpochEntropy.sol') },
+    'contracts/D20Proxy.sol': { content: read('contracts/D20Proxy.sol') },
   },
   settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'cancun', outputSelection: { '*': { '*': ['abi'] } } },
 };
 const output = JSON.parse(solc.compile(JSON.stringify(input), { import: path => {
   try {
-    if (path.startsWith('@openzeppelin/contracts/')) {
+    if ((path.startsWith('@openzeppelin/contracts/') || path.startsWith('@openzeppelin/contracts-upgradeable/'))) {
       const bytes = readFileSync(resolve(pkg, 'node_modules', path));
       manifest.buildDependencies[path] = sha256(bytes);
       return { contents: bytes.toString() };
@@ -54,8 +55,8 @@ const output = JSON.parse(solc.compile(JSON.stringify(input), { import: path => 
 } }));
 const errors = (output.errors ?? []).filter(e => e.severity === 'error');
 if (errors.length) throw new Error(errors.map(e => e.formattedMessage).join('\n'));
-const abi = output.contracts['contracts/ArcVRFCoordinator.sol'].ArcVRFCoordinator.abi;
-put('abi/ArcVRFCoordinator.json', JSON.stringify(abi, null, 2) + '\n');
+const abi = output.contracts['contracts/D20VRFCoordinator.sol'].D20VRFCoordinator.abi;
+put('abi/D20VRFCoordinator.json', JSON.stringify(abi, null, 2) + '\n');
 const epochEntropyAbi = output.contracts['contracts/EpochEntropy.sol'].EpochEntropy.abi;
 put('abi/EpochEntropy.json', JSON.stringify(epochEntropyAbi, null, 2) + '\n');
 put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\n`);
@@ -65,7 +66,7 @@ const program = ts.createProgram([...modules, 'abi'].map(n => resolve(pkg, `.gen
 const result = program.emit();
 const diagnostics = [...ts.getPreEmitDiagnostics(program), ...result.diagnostics];
 if (diagnostics.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, { getCurrentDirectory: () => pkg, getCanonicalFileName: f => f, getNewLine: () => '\n' }));
-for (const path of ['ArcVRFConsumer.sol', 'interfaces/IArcVRF.sol', 'libraries/ArcVRFRequests.sol', 'libraries/RandomnessMapping.sol', 'examples/MiningRandomnessConsumer.sol']) {
+for (const path of ['D20VRFConsumer.sol', 'interfaces/ID20VRF.sol', 'libraries/D20VRFRequests.sol', 'libraries/RandomnessMapping.sol', 'examples/MiningRandomnessConsumer.sol']) {
   put(`contracts/${path}`, read(`contracts/${path}`));
 }
 put('LICENSE', read('LICENSE'));

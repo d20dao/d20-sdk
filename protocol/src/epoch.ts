@@ -62,7 +62,7 @@ export function decodeEpochEvidencePacket(packet:string) {
 }
 export function replayEpochCommitment(input:{catalog:EpochCatalog;epochId:bigint;record:EpochRecord;commitTimestamp:bigint;packet:string}) {
   const {catalog,epochId,record}=input, start=epochStart(catalog.firstEpochStart,epochId);
-  if(record.committedBlock<=start-EPOCH_LENGTH||record.committedBlock>=start) throw new Error("Invalid epoch commit block");
+  if(record.committedBlock<start) throw new Error("Invalid epoch commit block");
   const selected=selectEpoch(catalog,epochId,record.anchorHash), evidence=decodeEpochEvidencePacket(input.packet);
   if(evidence.canonicalRequest!==selected.canonicalRequest) throw new Error("Epoch recipe mismatch");
   const verified=verifyEpochAttestation(selected,evidence.attestation,input.commitTimestamp);
@@ -79,16 +79,19 @@ export function epochTranscriptHash(c:EpochRequestContext,configurationHash:stri
   return keccak256(abi.encode(["bytes32","uint256","address","uint256","bytes32","bytes32","bytes32","bytes32","bytes32","uint64","bytes32"],
     [id("D20_VRF_TRANSCRIPT"),c.chainId,c.coordinator,c.requestId,configurationHash,c.blockHash,proofHash,randomness,hashMapping(c.mapping),c.epochId,c.epochHash]));
 }
-/// Canonical blocks and transaction inclusion/timestamps must be independently trusted chain context.
+/// Canonical blocks, transaction inclusion/timestamps and the proxy implementation code active
+/// at each receipt must be independently trusted chain context. A proxy code hash alone is insufficient.
 export function replayEpochCoordinator(input:{context:EpochRequestContext;configuration:EpochProtocolConfiguration;protocolConfigurationHash:string;
   epoch:{catalog:EpochCatalog;record:EpochRecord;commitTimestamp:bigint;packet:string};requestedAt:bigint;deadline:bigint;acceptanceTimestamp:bigint;acceptanceBlock:bigint;
   vrfProof:VRFProof;recorded:{fulfilled:boolean;randomness:string;proofHash:string;transcriptHash:string}}) {
   const c=input.context, cfg=input.configuration, e=input.epoch;
   const epoch=replayEpochCommitment({...e,epochId:c.epochId});
-  if(e.catalog.registry.toLowerCase()!==cfg.registry.toLowerCase()||e.catalog.chainId!==c.chainId||e.catalog.firstEpochStart!==cfg.firstEpochStart||epochCatalogHash(e.catalog.signers)!==cfg.catalogHash||epoch.epochHash!==c.epochHash||epochForBlock(cfg.firstEpochStart,c.targetBlock)!==c.epochId) throw new Error("Epoch request binding mismatch");
+  if(e.catalog.registry.toLowerCase()!==cfg.registry.toLowerCase()||e.catalog.chainId!==c.chainId||e.catalog.firstEpochStart!==cfg.firstEpochStart||epochCatalogHash(e.catalog.signers)!==cfg.catalogHash||epoch.epochHash!==c.epochHash||epochForBlock(cfg.firstEpochStart,c.requestBlock)!==c.epochId) throw new Error("Epoch request binding mismatch");
+  const expectedTarget=c.requestBlock>e.record.committedBlock+1n?c.requestBlock:e.record.committedBlock+1n;
+  if(c.targetBlock!==expectedTarget||e.record.committedBlock>=c.targetBlock) throw new Error("Invalid future randomness block");
   if(hashPublicKey(cfg.publicKey)!==c.keyHash||epochProtocolConfigurationHash(cfg)!==input.protocolConfigurationHash) throw new Error("Protocol configuration mismatch");
   if(cfg.confirmationBlocks<1||cfg.confirmationBlocks>64||input.acceptanceBlock<c.targetBlock+BigInt(cfg.confirmationBlocks)) throw new Error("Invalid acceptance block");
-  if(input.deadline!==input.requestedAt+60n||input.acceptanceTimestamp<input.requestedAt||input.acceptanceTimestamp>input.deadline||e.commitTimestamp>input.requestedAt) throw new Error("Invalid acceptance time");
+  if(input.deadline!==input.requestedAt+60n||input.acceptanceTimestamp<input.requestedAt||input.acceptanceTimestamp>input.deadline||e.commitTimestamp>input.acceptanceTimestamp) throw new Error("Invalid acceptance time");
   const seed=deriveRequestSeed(c),vrf=verifyVRFProof(input.vrfProof,cfg.publicKey,seed);
   if(!vrf.valid) throw new Error(vrf.reason);
   const proofHash=hashProof(input.vrfProof),transcriptHash=epochTranscriptHash(c,input.protocolConfigurationHash,proofHash,vrf.randomness),r=input.recorded;

@@ -2,21 +2,23 @@
 pragma solidity 0.8.28;
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-/// @notice Fixed market/quantum recipes, committed before each 200-block service epoch.
-contract EpochEntropy {
+/// @notice Fixed market/quantum recipes, published on demand for each 200-block epoch.
+contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
     uint64 public constant EPOCH_LENGTH = 200;
     uint256 public constant MAX_PACKET_BYTES = 2048;
     bytes32 public constant RECIPE_DOMAIN = keccak256("D20_EPOCH_RECIPES");
     bytes32 public constant SELECT_DOMAIN = keccak256("D20_EPOCH_SELECT");
     bytes32 public constant EPOCH_DOMAIN = keccak256("D20_EPOCH");
-    address public immutable hyperliquidSigner;
-    address public immutable anuSigner;
-    address public immutable btcTradeSigner;
-    address public immutable ethTradeSigner;
-    address public immutable committer;
-    uint64 public immutable firstEpochStart;
-    bytes32 public immutable catalogHash;
+    address public hyperliquidSigner;
+    address public anuSigner;
+    address public btcTradeSigner;
+    address public ethTradeSigner;
+    address public committer;
+    uint64 public firstEpochStart;
+    bytes32 public catalogHash;
     struct Attestation { uint256 timestamp; bytes data; bytes signature; }
     struct Selection { uint8 source; address airnode; bytes32 selector; bytes32 queryHash; string canonicalRequest; }
     struct Epoch {
@@ -24,15 +26,29 @@ contract EpochEntropy {
         bytes32 queryHash; bytes32 dataHash; bytes32 attestationHash; uint256 signedAt; uint64 committedBlock;
     }
     mapping(uint64 => Epoch) private epochs;
+    mapping(uint64 => bytes32) public epochAnchors;
+    // Preserve all declared fields/mapping value layouts; consume reserved slots when extending.
+    uint256[40] private __gap;
     error InvalidConfig(); error InvalidEpoch(); error PreparationClosed(); error AnchorUnavailable();
     error OnlyCommitter(); error AlreadyCommitted(); error InvalidTime(); error InvalidData(); error InvalidSigner();
     error PacketTooLarge();
     event EpochCommitted(uint64 indexed epochId, bytes32 indexed epochHash, bytes packet);
-    constructor(address[4] memory signers, address owner) {
-        if(signers[0]==address(0)||signers[1]==address(0)||signers[2]==address(0)||signers[3]==address(0)||owner==address(0)) revert InvalidConfig();
-        hyperliquidSigner=signers[0]; anuSigner=signers[1]; btcTradeSigner=signers[2]; ethTradeSigner=signers[3]; committer=owner;
+    event CommitterChanged(address indexed previousCommitter, address indexed newCommitter);
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() { _disableInitializers(); }
+    function initialize(address[4] memory signers, address initialOwner, address initialCommitter) external initializer {
+        __Ownable_init(initialOwner);
+        __Ownable2Step_init();
+        if(signers[0]==address(0)||signers[1]==address(0)||signers[2]==address(0)||signers[3]==address(0)||initialCommitter==address(0)) revert InvalidConfig();
+        hyperliquidSigner=signers[0]; anuSigner=signers[1]; btcTradeSigner=signers[2]; ethTradeSigner=signers[3]; committer=initialCommitter;
         firstEpochStart=uint64(block.number)+EPOCH_LENGTH;
         catalogHash=keccak256(abi.encode(RECIPE_DOMAIN,signers));
+    }
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function setCommitter(address next) external onlyOwner {
+        if(next==address(0)) revert InvalidConfig();
+        emit CommitterChanged(committer,next); committer=next;
     }
     function epochStart(uint64 epochId) public view returns(uint64) {
         if(epochId==0) revert InvalidEpoch();
@@ -41,13 +57,23 @@ contract EpochEntropy {
     function epochForBlock(uint256 number) public view returns(uint64) {
         return number<firstEpochStart?0:uint64(1+(number-firstEpochStart)/EPOCH_LENGTH);
     }
-    function nextEpochToPrepare(uint256 number) external view returns(uint64) { return epochForBlock(number)+1; }
+    function nextEpochToPrepare(uint256 number) external view returns(uint64) { return epochForBlock(number); }
+    /// @notice Preserve the canonical source selector without publishing any API data.
+    /// @dev Requests call this while their epoch's start-1 block is within BLOCKHASH range.
+    function checkpointEpoch(uint64 epochId) public returns(bytes32 anchor) {
+        anchor=_anchor(epochId);
+        if(epochAnchors[epochId]==bytes32(0)) epochAnchors[epochId]=anchor;
+    }
+    function _anchor(uint64 epochId) private view returns(bytes32 anchor) {
+        uint64 start=epochStart(epochId);
+        if(block.number<start) revert PreparationClosed();
+        anchor=epochAnchors[epochId];
+        if(anchor==bytes32(0)) anchor=blockhash(start-1);
+        if(anchor==bytes32(0)) revert AnchorUnavailable();
+    }
     function getEpoch(uint64 epochId) external view returns(Epoch memory) { return epochs[epochId]; }
     function getEpochSelection(uint64 epochId) public view returns(Selection memory s) {
-        uint64 start=epochStart(epochId); uint64 anchorBlock=start-EPOCH_LENGTH;
-        if(block.number<=anchorBlock||block.number>=start) revert PreparationClosed();
-        bytes32 anchor=blockhash(anchorBlock);
-        if(anchor==bytes32(0)) revert AnchorUnavailable();
+        bytes32 anchor=_anchor(epochId);
         s.selector=keccak256(abi.encode(SELECT_DOMAIN,catalogHash,epochId,anchor));
         s.source=uint8(uint256(s.selector)%4);
         if(s.source==0){s.airnode=hyperliquidSigner;s.canonicalRequest='["metaAndAssetCtxs",[["dex",""]],[["symbol","/0/universe/0/name"],["value","/1/0/dayNtlVlm"]]]';}
@@ -66,8 +92,8 @@ contract EpochEntropy {
         if(ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(digest),a.signature)!=s.airnode) revert InvalidSigner();
         bytes32 dataHash=keccak256(a.data);
         bytes32 attestationHash=keccak256(abi.encode(s.queryHash,a.timestamp,dataHash,keccak256(a.signature)));
-        bytes32 anchor=blockhash(epochStart(epochId)-EPOCH_LENGTH);
-        // The complete accepted commitment is fixed before any paid request can use this epoch.
+        bytes32 anchor=checkpointEpoch(epochId);
+        // Request randomness always uses a block strictly after this commitment.
         bytes32 commitment=keccak256(abi.encode(EPOCH_DOMAIN,block.chainid,address(this),catalogHash,epochId,
             epochStart(epochId),anchor,s.source,s.queryHash,dataHash,attestationHash));
         epochs[epochId]=Epoch(commitment,catalogHash,anchor,s.source,s.queryHash,dataHash,attestationHash,a.timestamp,uint64(block.number));

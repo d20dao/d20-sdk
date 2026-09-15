@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IArcVRFConsumer} from "./interfaces/IArcVRF.sol";
+import {ID20VRFConsumer} from "./interfaces/ID20VRF.sol";
 
-/// @notice Every game must authenticate callbacks before touching game state.
-abstract contract ArcVRFConsumer is IArcVRFConsumer {
+/// @notice Every consumer must authenticate callbacks before changing application state.
+abstract contract D20VRFConsumer is ID20VRFConsumer {
     address public immutable vrfCoordinator;
     error OnlyCoordinator();
     error InvalidCoordinator();

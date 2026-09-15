@@ -1,0 +1,44 @@
+{
+  "sourceMode": "explicit CI fixture",
+  "canonicalProtocolCommit": "c10699c490c0dd6c7b5ccba7e704cb01fa8c86fa",
+  "traceSha256": "633908084df5da27806c2ec04f71060a984cd62a738446863793eb481ba4bee4",
+  "note": "Current explicit CI signatures, real Rust proofs and local UUPS acceptance. Not live API3.",
+  "fixtures": {
+    "epoch-replay-1.json": {
+      "requestId": "1",
+      "epochId": "1",
+      "source": 1,
+      "fulfillmentTransactionHash": "0x7074c6db2ede17ab31eced1071be1c81e989f8a9a69c320dedd99bf0b934d378"
+    },
+    "epoch-replay-4.json": {
+      "requestId": "4",
+      "epochId": "2",
+      "source": 3,
+      "fulfillmentTransactionHash": "0x02bb385ab3060d55f0f03797a2ff1569ffe61300abd81af23512aab62f3f53e7"
+    },
+    "epoch-replay-7.json": {
+      "requestId": "7",
+      "epochId": "5",
+      "source": 2,
+      "fulfillmentTransactionHash": "0x5aea02a3b72ade5922e899d246dd16b6f5a590ed0d1aff4e0a318887bec0f136"
+    },
+    "epoch-replay-9.json": {
+      "requestId": "9",
+      "epochId": "7",
+      "source": 0,
+      "fulfillmentTransactionHash": "0x2084f3e088a7bb04543f177d4d118340a1f9f1621e41a60ae7521d111b5b43f7"
+    },
+    "epoch-replay-2.json": {
+      "requestId": "2",
+      "epochId": "1",
+      "source": 1,
+      "fulfillmentTransactionHash": "0xe255f7a6161e4b26cf8a248a0217f3dc391f45f938dddc5ca5228d150f63c220"
+    },
+    "epoch-replay-3.json": {
+      "requestId": "3",
+      "epochId": "1",
+      "source": 1,
+      "fulfillmentTransactionHash": "0x6a0ac05ff951eef577d013f9090c804f1e3697101b3ec57c7b3d5f4948b6cc69"
+    }
+  }
+}

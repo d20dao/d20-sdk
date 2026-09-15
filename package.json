@@ -1,7 +1,7 @@
 {
-  "name": "@arcdao/vrf-sdk",
+  "name": "@d20dao/vrf-sdk",
   "version": "0.1.0-alpha.0",
-  "description": "Public ArcDao VRF replay helpers and Solidity consumer starter sources (unreleased alpha)",
+  "description": "Public d20dao VRF replay helpers and Solidity consumer starter sources (unreleased alpha)",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -23,7 +23,7 @@
       "types": "./dist/epoch.d.ts",
       "import": "./dist/epoch.js"
     },
-    "./abi/ArcVRFCoordinator.json": "./abi/ArcVRFCoordinator.json",
+    "./abi/D20VRFCoordinator.json": "./abi/D20VRFCoordinator.json",
     "./abi/EpochEntropy.json": "./abi/EpochEntropy.json",
     "./contracts/*": "./contracts/*",
     "./examples/*": "./examples/*",
@@ -40,7 +40,7 @@
     "notices/*",
     "BUILD-MANIFEST.json",
     "scripts/block-publish.mjs",
-    "abi/ArcVRFCoordinator.json",
+    "abi/D20VRFCoordinator.json",
     "abi/EpochEntropy.json"
   ],
   "scripts": {
@@ -58,7 +58,8 @@
     "@types/node": "24.10.0",
     "esbuild": "0.28.2",
     "solc": "0.8.28",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "@openzeppelin/contracts-upgradeable": "5.6.1"
   },
   "overrides": {
     "solc": {

@@ -11,7 +11,7 @@ export interface VRFProof {
 }
 export interface RequestContext {
   chainId: bigint; coordinator: string; keyHash: string; requestId: bigint;
-  consumer: string; clientSeed: string; mapping: MappingSpec; targetBlock: bigint; blockHash: string;
+  consumer: string; clientSeed: string; mapping: MappingSpec; requestBlock: bigint; targetBlock: bigint; blockHash: string;
   epochId: bigint; epochHash: string;
 }
 const abi = AbiCoder.defaultAbiCoder();
@@ -23,9 +23,9 @@ type PointType = InstanceType<typeof Point>;
 
 export function deriveRequestSeed(r: RequestContext): bigint {
   return BigInt(keccak256(abi.encode(
-    ["bytes32", "uint256", "address", "bytes32", "uint256", "address", "bytes32", "bytes32", "uint64", "bytes32", "uint64", "bytes32"],
+    ["bytes32", "uint256", "address", "bytes32", "uint256", "address", "bytes32", "bytes32", "uint64", "uint64", "bytes32", "uint64", "bytes32"],
     [id("D20_VRF_SEED"), r.chainId, r.coordinator, r.keyHash, r.requestId,
-      r.consumer, r.clientSeed, hashMapping(r.mapping), r.targetBlock, r.blockHash, r.epochId, r.epochHash]
+      r.consumer, r.clientSeed, hashMapping(r.mapping), r.requestBlock, r.targetBlock, r.blockHash, r.epochId, r.epochHash]
   )));
 }
 

@@ -1,72 +1,64 @@
-# ArcDao VRF SDK — unreleased alpha
+# d20dao VRF SDK — unreleased alpha
 
-Public SDK for a general randomness service: epoch attestation, VRF replay and mapping helpers, generated coordinator/epoch-registry ABIs and minimal Solidity consumer imports. The current protocol is epoch API3 plus fixed-key VRF: a signed record is committed before each 200-block service epoch, then every request fixes that epoch ID/hash in its deterministic VRF input. Randomness fulfillment submits only the real VRF proof; it makes no per-request API call.
+Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. The package is `@d20dao/vrf-sdk` `0.1.0-alpha.0`. It remains private and publishing is guarded; local packaging is not a release or deployment claim.
 
-`@arcdao/vrf-sdk` `0.1.0-alpha.0` is provisional and private. Scope ownership is unverified. Local pack/install is supported; publishing remains blocked pending protocol/operator review and an explicitly authorized release.
+## Current request flow
 
-## Build and try locally
+Epochs last 200 blocks. The keeper selects one of four fixed recipes using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
 
-With Node >=22.13:
+After activation, a consumer escrows the exact request fee even when the epoch packet is not published. The request fixes its original block, epoch, client seed, mapping, recipient and 60-second deadline. The keeper publishes the saved packet only for live allowlisted demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication. Before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
-```sh
-npm ci
-npm run build
-npm pack --dry-run
-npm pack
-npm test
-```
+The four ordered recipe slots are Hyperliquid BTC volume, ANU quantum data, TickerLayer BTCUSD lastTrade and TickerLayer ETHUSD lastTrade. Both TickerLayer slots use the same provider signer and crypto asset class. `EpochSigners` is a readonly four-address tuple. The full exact signed data is limited to 128 bytes and emitted publicly; do not crop or replace it. A signature establishes provider-wrapper provenance, not unbiased upstream data or guaranteed availability.
 
-Install the tarball reported by `npm pack` in a separate consumer project. There is no published-install or deployment claim.
+## Use locally
+
+With Node >=22.13, run `npm ci` and `npm test`. The test builds, packs and installs a real tarball in an isolated consumer. Install the filename reported by `npm pack` in your application; no registry publication is implied.
 
 ```js
-import { builtins, hashMapping, mapRandomness } from '@arcdao/vrf-sdk';
-import { coordinatorAbi, epochEntropyAbi } from '@arcdao/vrf-sdk/abi';
+import { builtins, mapRandomness, replayCoordinator } from '@d20dao/vrf-sdk';
+import { coordinatorAbi, epochEntropyAbi } from '@d20dao/vrf-sdk/abi';
 const mapping = builtins.d20();
-console.log(hashMapping(mapping));
-// Use an independently verified accepted word for real outcomes.
-const illustrativeWord = `0x${'00'.repeat(32)}`;
-console.log(mapRandomness(illustrativeWord, mapping));
-console.log(coordinatorAbi.length, epochEntropyAbi.length);
+// Use only an independently verified accepted word for real outcomes.
 ```
 
-The root exports public ESM and TypeScript declarations; `/epoch` exposes epoch helpers. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`; JSON forms are `@arcdao/vrf-sdk/abi/ArcVRFCoordinator.json` and `@arcdao/vrf-sdk/abi/EpochEntropy.json`. Read installed declarations for exact replay inputs. Runtime dependencies are ethers 6.17.0 and @noble/curves 1.9.7. Solidity imports require compiler **0.8.28**.
+The root exports ESM and TypeScript declarations; `/epoch` exports epoch helpers. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`. The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
 
 ## Integrate a consumer
 
-Use the packaged sources and your compiler's npm import resolver:
+Solidity imports require compiler 0.8.28 and your compiler's npm resolver:
 
-- `@arcdao/vrf-sdk/contracts/ArcVRFConsumer.sol`
-- `@arcdao/vrf-sdk/contracts/interfaces/IArcVRF.sol`
-- `@arcdao/vrf-sdk/contracts/libraries/ArcVRFRequests.sol`
-- `@arcdao/vrf-sdk/contracts/libraries/RandomnessMapping.sol`
-- `@arcdao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol`
+- `@d20dao/vrf-sdk/contracts/D20VRFConsumer.sol`
+- `@d20dao/vrf-sdk/contracts/interfaces/ID20VRF.sol`
+- `@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol`
+- `@d20dao/vrf-sdk/contracts/libraries/RandomnessMapping.sol`
+- `@d20dao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol`
 
-Start from `examples/DiceConsumer.sol`. Pin the approved chain, deployed coordinator code/configuration, epoch registry and immutable public key. No deployment address is supplied; a constructor code-length check alone does not establish trust. Obtain keeper allowlist onboarding before live requests. Permissionless coordinator acceptance and SDK installation do not guarantee fulfillment.
+`examples/DiceConsumer.sol` is one concrete consumer example. It requires exact payment, fixes the player's refund recipient and stores the authenticated raw callback word. Its mapped result is 1 through 20. Mapped callbacks still carry raw bytes32. Keep application actions separate from callbacks; the example does not implement application-payment refunds, claim locking or minting.
 
-The dice starter requires exact `msg.value == requestFee()`, fixes the refund recipient to the player and stores the authenticated raw callback word. `result(id)` returns the mapped d20 value from 1 through 20. Built-in mappings still callback with raw `bytes32`; do not treat it directly as the mapped result. Keep minting/transfers separate from the callback. The starter does not implement game-payment refunds, PoW checks, claim locking or minting.
+Configure the chain explicitly; there is no implicit Arc network default. Pin the effective coordinator proxy address, initialized configuration and implementation history of both service proxies. Obtain keeper consumer onboarding before live requests. A constructor code-length check, SDK installation or permissionless request acceptance does not guarantee service.
 
-A request is admitted only in a committed epoch. Before the first epoch starts, or when the current epoch has no commitment, creation reverts and retains no request fee. The signed epoch record must be committed before the epoch starts. A late commitment cannot repair an already-started epoch. An accepted request keeps its original epoch across subsequent epoch boundaries.
+Timely service requires actual onchain proof acceptance at or before original request time +60 seconds. Callback failure still earns the fee; retryCallback redelivers only the same accepted result. Expired unfulfilled requests refund their fixed recipient or receive refund credit. Application-payment refunds remain separate.
 
-Valid proof acceptance must occur onchain at or before request time +60 seconds. Callback failure does not undo paid service: `retryCallback(id, gasLimit)` redelivers only the same accepted result. An expired unfulfilled request uses `refundRequest(id)`; payment goes to its fixed recipient or refund credit, not the caller. These recovery functions belong to the full coordinator ABI, not the smaller consumer interface. Application-payment refunds remain separate.
+## Replay and upgrades
 
-## Verify public evidence
+Use independently trusted successful receipts and state. Decode the registry EpochCommitted packet with decodeEpochEvidencePacket and verify with replayEpochCommitment. Use the original source anchor, exact packet, commit block/time, ordered signers and registry identity. Decode the coordinator FulfillmentEvidence packet with decodeEvidencePacket, then call replayCoordinator with its actual exported input type.
 
-Retrieve successful receipts and state from trusted chain infrastructure. Verify chain, log emitters, deployed code/configuration and actual epoch/request block hashes. The epoch registry's `EpochCommitted.packet` archives the exact query and signed attestation. Use `decodeEpochEvidencePacket` and `replayEpochCommitment` to reconstruct source/query selection, signature, pre-start commitment and epoch hash. The immutable catalog has four ordered recipe slots from three providers: 0 Hyperliquid BTC volume, 1 ANU quantum data, 2 TickerLayer BTCUSD lastTrade and 3 TickerLayer ETHUSD lastTrade. Both TickerLayer recipes use assetClass crypto and the same API3 Airnode signer `0x32f5eA20F05fdADfCD50Cb8eD920acE96D5f9f2c`. `EpochSigners` is a readonly four-address tuple and the registry constructor takes address[4]; verify all four slots in approved deployment configuration. The exact raw signed response is limited to 128 bytes and remains in the public epoch event; selected source/query are deterministic and cannot be replaced after failure.
+RequestContext binds both requestBlock and targetBlock. Validate the epoch from the original request block, reconstruct the target from the actual publication block, and compare the event and stored transcript. Proof evidence is 416 bytes; fulfillment calldata is 452 bytes. Neither evidence packet has a version prefix. Choose the decoder from trusted emitter/event context. Decoding and mapping alone are not proof verification; replay does not authenticate RPC or establish receipt inclusion.
 
-The coordinator's `FulfillmentEvidence.packet` contains only the VRF proof. Decode it with `decodeEvidencePacket`, then use `replayCoordinator` with independently trusted epoch/configuration/request context, actual acceptance block/time and recorded result commitments. Read the exact exported input type. Compare replayed transcript with BOTH event and storage. The proof packet is 416 bytes; neither proof nor epoch packet has a version prefix. Choose the decoder from the trusted emitter/event, not arbitrary packet bytes.
+D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers. The registry owner can change the committer; the coordinator owner can change fee recipient and keeper share. Upgrade authority can change code and is an explicit trust assumption. Keep requests, balances, credits, epochs and public replay intact across reviewed storage-compatible upgrades.
 
-Decoding is not verification. Replay does not authenticate RPC responses or establish receipt inclusion itself. Never derive an expected key or input from the submitted proof. Mapping alone does not verify a proof. Apply the integrator's finality/reorg policy. API3 signatures establish signed wrapper provenance, not unbiased upstream data or immunity to withholding.
+For replay, populate configuration.feeRecipient from the initialized initialFeeRecipient, not the current payout address. Use the effective proxy addresses in request and registry context. Operators pin the proxy code, initialized configuration, and BOTH implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change. Existing proof/nonce data must survive the review and restart.
 
-This public package does not fetch or publish epochs, generate proofs, hold secrets, send transactions or supply a keeper service. The separate keeper publisher prepares epochs in the background through the same wallet nonce lane as fulfillment; randomness requests need no additional API fetch. Resolved keeper history compaction removes raw replay payloads while retaining identities, hashes and status metadata; public replay should read the original chain events, not expect a permanent raw-payload archive in the keeper database.
+The keeper share pays the configured registry committer, not an arbitrary proof submitter. Failed transfers become keeper credit. Refund escrow remains protected; callback retries do not pay a second fee share.
 
-## Maintenance and release boundary
+## Operational and release boundary
 
-Build from the pinned `protocol/` snapshot in this repository; no sibling checkout is needed. Canonical upstream is [d20dao/keeper](https://github.com/d20dao/keeper). `PROTOCOL-PROVENANCE.json` records the reviewed commit and source SHA-256 values; every hash is checked at build time. `IMPORT-PROVENANCE.json` preserves import history. Do not fork cryptographic behavior in packaging or hand-edit generated output.
+This SDK contains no keeper service, API fetching, proof generation, signer secrets or deployment automation. The canonical keeper has a Docker install wrapper that builds, provisions separately supplied key files and starts from reviewed configuration; inspect its platform-specific guide before use. No deployment or funding is authorized by SDK installation.
 
-The build mechanically converts relative TypeScript extensions to ESM, emits declarations, compiles coordinator/registry ABIs with pinned solc and copies the minimal consumer Solidity closure byte-for-byte. `BUILD-MANIFEST.json` embeds protocol provenance, dependency-lock hash and imported OpenZeppelin source hashes. Keeper code, coordinator implementation, vendored verifier and test fixtures/provers are excluded from the tarball; licenses and notices are retained.
+Optional Telegram access is disabled unless a bot token and numeric operator chat are explicitly configured. Only that chat can use read-only /status and /keeper commands. Commands never modify configuration or send transactions; notifications are best-effort observations, not chain evidence. This package neither reads bot credentials nor contacts Telegram.
 
-`npm test` installs an actual tarball in an isolated OS-temp consumer, checks public runtime exports and JSON ABIs, type-checks without `skipLibCheck`, bundles for browser use and compiles consumer Solidity imports. The browser-target bundle is executed under Node; this is not an actual browser-session test. Test fixtures contain public test signatures/proofs and explicit chain context only and are not shipped. Tests require npm registry access and leave the temporary consumer available for inspection.
+Builds use reviewed protocol Git blobs and verify every SHA-256 in PROTOCOL-PROVENANCE.json. BUILD-MANIFEST.json records source, dependency-lock and imported OpenZeppelin hashes. The UUPS build uses OpenZeppelin contracts and contracts-upgradeable 5.6.1. Consumer source is copied exactly; service implementations, operator code, test fixtures and provers are excluded from the tarball.
 
-For agent-assisted work, instruct your agent to read `node_modules/@arcdao/vrf-sdk/AGENTS.md` and this README before integration. Presence in node_modules does not guarantee automatic loading.
+Fixture provenance distinguishes explicit CI signatures from actual API3 responses. Fixtures are not included in the package. The browser-target bundle is executed under Node, not an actual browser session; independently trusted chain context is still required for real verification.
 
-Release still requires external cryptographic review, real source admission, epoch publication/recovery and keeper readiness review, actual chain timing/native-fee validation, application refunds, verified registry/scope ownership and explicit release authorization. Passing local package tests does not satisfy those gates. A known readiness gap can report healthy status while the active epoch is missing; health alone must not be presented as a public service availability guarantee. Read `docs/sdk-release-checklist.md`; the private flag and unconditional publish guard remain enabled.
+External review, provider quotas, actual chain fees/timing, upgrade administration, operational recovery and application refunds remain release gates. A healthy process alone does not guarantee a particular request's timely fulfillment. Keep the private flag and unconditional publish guard until a concrete release is authorized. Local validation does not authorize publishing or deployment.

@@ -1,20 +1,35 @@
-# Instructions for agents integrating this SDK
+# d20dao consumer-agent guide
 
-Read the README and actual packaged interfaces before editing a consumer. This alpha is locally packable, not released or approved for production. `@arcdao` scope ownership is unverified. Never invent deployment addresses, chain readiness, service availability or onboarding APIs.
+Use this guide when integrating @d20dao/vrf-sdk into an application or interpreting its public evidence. The package provides a general randomness interface; dice and mining contracts are examples. Read installed declarations for exact types and match PROTOCOL-PROVENANCE.json to the deployment being used. The current alpha is not a published service guarantee.
 
-- The current coordinator combines precommitted API3 epochs with fixed-key VRF. Each 200-block epoch fixes a signed record before its start. Every request pins the epoch ID/hash in its deterministic proof input; fulfillment carries only the real VRF proof. A missing current commitment makes request creation revert without retaining a fee.
-- Use `coordinatorAbi`, `epochEntropyAbi`, public `replayCoordinator`, `decodeEvidencePacket` and epoch helpers. Proof evidence is 416 bytes without a version prefix; epoch evidence is the canonical query plus attestation without a version prefix. Choose the decoder from the independently trusted contract/event.
-- Preserve application-specific validation/payment where needed -> exact-fee randomness request -> keeper proof -> authenticated callback -> deterministic result -> separate application action. The dice example is one consumer integration, not the service scope.
-- Read `requestFee()` from the pinned coordinator. Require exact payment before forwarding; helpers send the quote from the consumer balance. Do not subsidize underpayment from prefunded funds or retain overpayment.
-- Timely acceptance means valid onchain proof at or before requestedAt +60 seconds. Pending transactions, server events and callback arrival are not acceptance evidence. After expiry, refund only an unfulfilled request to its fixed recipient; failed native transfers become refund credit. Application-payment refunds are separate.
-- Authenticate callbacks through ArcVRFConsumer's immutable coordinator and verify request ownership/existence. Callbacks carry RAW bytes32 even for mappings; use getMappedResult or canonical mapping. Store results; keep application actions and transfers separate.
-- Valid proof with failed callback earns the fee. retryCallback retries only that SAME result; never reroll for recovery. Keep request key/input/mapping/epoch fixed, including across epoch boundaries.
-- Complete replay needs independently trusted successful receipts, emitting registry/coordinator and chain, epoch anchor and commit block/time, exact epoch log packet, registry/signers/configuration, request block hash and inclusion timestamp, fixed key/mapping/epoch, and event plus stored transcript equality. A packet alone proves none of these. Do not take expected key or seed from submitted proof data.
-- Epoch recipe IDs are 0 Hyperliquid BTC volume, 1 ANU, 2 TickerLayer BTCUSD and 3 TickerLayer ETHUSD. Four ordered signer slots represent three providers; both TickerLayer lastTrade crypto recipes use the same signer. Source/query derive deterministically from the fixed catalog and anchor. No source fallback, query change, truncation of signed data or response refresh after persistence. Preserve the entire raw signed response (maximum 128 bytes) in epoch evidence. Attestation is not proof of unbiased upstream data.
-- The separate epoch publisher uses the keeper's wallet nonce lane. Public helpers do not fetch/publish epochs, hold keys or generate proofs. Import only the public package in browsers; never bundle keeper/test signer code, private keys, environments or journals. No public keeper API.
-- Obtain consumer allowlist onboarding before live requests; SDK installation and coordinator acceptance do not guarantee service.
-- A known readiness gap may report healthy while the active epoch is missing; verify actual epoch admission before representing service availability.
-- Release gates include crypto review, real source admission, publisher nonce/restart recovery, keeper readiness, actual chain/fee behavior and application refunds. Successful packaging does not remove them.
-- No publishing, deployment or real-fund operations without explicit authorization after release blockers are resolved. Do not bypass private/publish guards with ignore-scripts.
+## Public interfaces
 
-Maintainers: canonical upstream is https://github.com/d20dao/keeper. Build from the reviewed pinned protocol snapshot, update source/provenance together, preserve licenses and run npm ci and npm test. Do not independently modify protocol behavior during packaging.
+Import builtins, mapRandomness, decodeEvidencePacket and replayCoordinator from @d20dao/vrf-sdk. Epoch helpers also have an /epoch entrypoint. Import coordinatorAbi and epochEntropyAbi from /abi. Solidity consumers use D20VRFConsumer, ID20VRF, D20VRFRequests and RandomnessMapping under /contracts with compiler 0.8.28.
+
+RequestContext binds chainId, effective coordinator proxy, keyHash, requestId, consumer, clientSeed, mapping, requestBlock, targetBlock, blockHash, epochId and epochHash. Consult Parameters<typeof replayCoordinator>[0] for the complete trusted replay input. configuration.feeRecipient uses the initialized initialFeeRecipient, not the current payout address.
+
+## Request lifecycle
+
+Epochs last 200 blocks. The keeper prepares the first validated API3 snapshot locally using the source anchor at epochStart-1. Idle preparation causes no publication transaction. Unused snapshots may remain locally for 50 epochs/10,000 blocks, with live-request and unresolved-transaction protection.
+
+After activation, a consumer escrows the exact requestFee even if its epoch is unpublished. Live allowlisted demand triggers publication of that saved packet. The target becomes max(requestBlock,committedBlock+1); no usable VRF seed exists until that future hash is known. Preserve original request block, epoch, client seed, mapping, recipient and 60-second deadline. Older-epoch demand can settle across a boundary without changing its packet.
+
+Require exact payment and keep caller/request association stable. D20VRFConsumer authenticates the coordinator proxy; verify the expected request and store the raw callback word with minimal work. Mapped requests still callback with bytes32; use getMappedResult or canonical mapping. Keep application actions and payments separate from the callback.
+
+Valid onchain acceptance at or before requestedAt+60 seconds is timely. A pending transaction is not acceptance. Callback failure still earns service payment; retryCallback redelivers only the same accepted result. After expiry, an unfulfilled request refunds its fixed recipient or refund credit. Application-payment refunds are separate.
+
+Keeper share pays the configured registry committer, not an arbitrary proof submitter. Failed payment creates keeper credit. Refund escrow is separate, and retrying delivery cannot pay a second share.
+
+## Verification and trust
+
+The four ordered recipe slots are Hyperliquid BTC volume, ANU, TickerLayer BTCUSD and TickerLayer ETHUSD; the latter two share a provider signer. Preserve the entire exact signed response, limited to 128 bytes. Signatures establish wrapper provenance, not unbiased upstream data.
+
+Decode epoch evidence using its trusted registry/event context and decodeEvidencePacket for FulfillmentEvidence. Proof evidence is 416 bytes; fulfillment calldata is 452 bytes. Supply independently trusted successful receipts, proxy implementation history, source/publication/request/target blocks and timestamps, initialized key/configuration and original signed packets. Compare both event and stored transcript commitments. Decoding and mapping alone do not verify origin; replay does not authenticate RPC or establish inclusion.
+
+Both service contracts use atomically initialized D20Proxy endpoints with owner-authorized UUPS upgrades and two-step ownership. Implementations are locked against initialization. Upgrade authority is trusted. Verify the implementation history of BOTH coordinator and registry; stable proxy addresses alone do not identify executed code. Operator pins stop processing on unreviewed changes while preserving recovery data.
+
+## Service boundaries
+
+Always configure the actual chain explicitly; there is no implicit Arc network default. Obtain consumer onboarding and approved proxy/configuration details before live requests. Healthy process status does not guarantee a particular request's timely fulfillment.
+
+This SDK holds no signer or bot keys, runs no keeper/prover and exposes no operator API. Optional Telegram access is disabled by default and limited to read-only /status and /keeper in the configured operator chat. Those commands cannot alter configuration or send transactions. Docker provisioning, upgrades, funding and publishing are separate operator actions, not consequences of SDK integration.

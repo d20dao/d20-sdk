@@ -1,7 +1,7 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "db7101890b151f4539b3f6050d708bf7bfd381c7",
-  "note": "Current public protocol files copied byte-for-byte from canonical committed Git blobs. Keeper operations and test fixtures are not distributed.",
+  "sourceCommit": "dcca615b3e07f273e45fa5596f80b63da241896a",
+  "note": "Public protocol files copied byte-for-byte from canonical committed Git blobs. Four ordered recipe slots; keeper operations and test fixtures are not distributed.",
   "files": {
     "LICENSE": "603f4139e9afa370040f1a6dd73b7450ea85790bd5115747865a4eb104a2d2bd",
     "contracts/ArcVRFConsumer.sol": "ad2ab4d777b5490cf75418a7030c097bf833540f2c4ab3b40001dac73386e6c3",
@@ -14,12 +14,12 @@
     "contracts/vendor/PROVENANCE.md": "42064bd2d3a18d64a93cfa3aa52facb4d2ff6e201e7a7dfdbb0066c091e8c570",
     "contracts/vendor/VRF.sol": "98e0345fd2dd42178cad4ad16dd8b18621112078d63d0c64839c8bd01c539350",
     "src/evidence.ts": "81b6a1446b9700ec545e794b08d356411608aa655e6030cdfabd1dfa531ef457",
-    "src/index.ts": "5a048a1d0c3a27763ba5ab1cc2810aad155d4ff785513e2dafbc3bbc368af4c8",
+    "src/index.ts": "6c23d8e952dfe4b7cd08cbd36f2e4bf6f434ebfc408c602038bc678b2ba4e174",
     "src/mapping.ts": "76aa6093d55831052b56e177fc394ef6ef14183a8ab8ca6fcc2c9382efb6b83f",
     "src/replay.ts": "c97a5081e785e6a7f27987e2d4c4d9861fe8fa8cbc775b0152e337141d3d48d7",
     "src/sources.ts": "d8566e7809c67dc51acab3b58fc93d734d098c2eabbaf3657ac910affe12e31e",
     "src/verification.ts": "995636cd067d0ee020b272f2146fa0964aac8a23e829856a8c644ea17aa49f9e",
-    "src/epoch.ts": "b60294dff3e569d9738a5cd5d81eb7cef016097e56089880108119d0d3e910f3",
-    "contracts/EpochEntropy.sol": "9a711894d7bb4c313a031e582e4f9219bd0555bcf3ff01b35c7b7678f49d33fc"
+    "src/epoch.ts": "84c1dccf5d5bf38ce5a5e237b3fdb17eb1f5d6a92e46ffd206c49415d1c0abc6",
+    "contracts/EpochEntropy.sol": "3eb967d84d1eb7882a993898fc35822c890e6c09f0447d64a40791fa841b8ba5"
   }
 }

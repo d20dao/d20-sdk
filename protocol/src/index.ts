@@ -9,4 +9,4 @@ export {encodeEvidencePacket,decodeEvidencePacket,EVIDENCE_PACKET_BYTES} from ".
 export {EPOCH_LENGTH,EPOCH_RECIPE_DOMAIN,epochCatalogHash,epochStart,epochForBlock,selectEpoch,
   verifyEpochAttestation,epochCommitmentHash,encodeEpochEvidencePacket,decodeEpochEvidencePacket,
   replayEpochCommitment,epochProtocolConfigurationHash} from "./epoch.ts";
-export type {EpochCatalog,EpochRecord,EpochProtocolConfiguration} from "./epoch.ts";
+export type {EpochCatalog,EpochSigners,EpochRecord,EpochProtocolConfiguration} from "./epoch.ts";

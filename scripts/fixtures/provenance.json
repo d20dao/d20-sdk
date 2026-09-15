@@ -1,0 +1,38 @@
+{
+  "sourceMode": "live API3",
+  "traceSha256": "b8da3455ab96f17eb24fa16e685641b481d514196890c91777279bec9b7c7793",
+  "note": "Public replay inputs extracted from a real API3 four-source local-chain demo with onchain epoch commitments and Rust VRF fulfillments. No signer keys or prover code.",
+  "fixtures": {
+    "epoch-replay.json": {
+      "requestId": "1",
+      "epochId": "1",
+      "source": 3,
+      "fulfillmentTransactionHash": "0xa4c5cc8df2d636bba360e031838384ead5d04b9be700e969a03f8eb9219c361a"
+    },
+    "epoch-replay-boundary.json": {
+      "requestId": "2",
+      "epochId": "1",
+      "source": 3,
+      "fulfillmentTransactionHash": "0x53f3c4f8b97f997511a700073eefe7087ca18ef0e1df519ce81f8992c60efc3d"
+    },
+    "epoch-replay-btc.json": {
+      "requestId": "3",
+      "epochId": "2",
+      "source": 2,
+      "fulfillmentTransactionHash": "0xf3b6621d139693c0f5cbee042ad7e25e265357d1b116b6619d88de82ddea15c1"
+    },
+    "epoch-replay-hyper.json": {
+      "requestId": "4",
+      "epochId": "3",
+      "source": 0,
+      "fulfillmentTransactionHash": "0xdc44d461c0dfc297f45445699ead7c0f8ec7fe50652e592fba126285ac8c8bc8"
+    },
+    "epoch-replay-anu.json": {
+      "requestId": "14",
+      "epochId": "13",
+      "source": 1,
+      "fulfillmentTransactionHash": "0x55beb4ce7e3246e49c9b44e24182d14132bc1d751028fa843e095bcb48b38be7"
+    }
+  },
+  "canonicalProtocolCommit": "dcca615b3e07f273e45fa5596f80b63da241896a"
+}

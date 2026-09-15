@@ -6,7 +6,8 @@ Before proposing release:
 
 - Review the real fixed-key VRF, deterministic epoch selection, exact signed payload validation and pre-start commitment behavior. Obtain external cryptographic review.
 - Verify epoch publisher nonce ownership, persisted response/proof reuse, restart/reorg recovery, expiry, wallet caps and keeper service readiness.
-- Validate real API3 source admission, chain block timing/native-token fee behavior, immutable coordinator/registry/key configuration and game-payment refunds.
+- Resolve the known healthy-with-missing-epoch readiness gap before making a public service guarantee.
+- Validate all four API3 recipe slots across three providers, chain block timing/native-token fee behavior, immutable coordinator/registry/key configuration and game-payment refunds.
 - Confirm consumer allowlist onboarding. Permissionless request submission is not a service guarantee.
 - Confirm registry/scope ownership, package name/version, intended registry and license/provenance. Review the actual tarball for secrets, fixtures, keeper code and test provers.
 - From the exact canonical pinned commit, run required protocol/keeper checks and SDK npm ci/test. Review source hashes, generated ABI, public JS/TypeScript, browser-target and Solidity consumer tests. Review installed AGENTS.md and instructions.

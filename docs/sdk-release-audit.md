@@ -2,7 +2,13 @@
 
 **Publish remains blocked.** The alpha package is private and its unconditional prepublishOnly guard remains enabled. Scope ownership, release credentials and release authorization are unverified.
 
-## Current work
+## Four-recipe update
+
+TickerLayer BTCUSD and ETHUSD lastTrade recipes add slots 2 and 3 to the current catalog. Both use the same API3 signer; the catalog now binds four ordered addresses. The 128-byte raw-data bound and full epoch event evidence remain unchanged. Five current live-API3 fixtures cover all four slots and a request fulfilled across an epoch boundary. They come from the canonical 13-epoch/14-request local-chain demo and retain its sourceMode and trace hash in repository-only fixture provenance. The current tarball passed npm test in fresh consumer tohe9c: 33 files, 30,192 compressed bytes and a 283,252-byte browser-target bundle. Installed JavaScript and the browser-target bundle replay every fixture; exact four-address ABI/type checks, codec/input rejection and consumer Solidity compilation pass. The additional epoch-boundary coverage assertion passed against the same installed tarball. All 18 public source files now match exact canonical Git blobs at `dcca615b3e07f273e45fa5596f80b63da241896a`; vendor bytes are unchanged. The final npm test passed after this pin. The known healthy-with-missing-epoch readiness gap remains open.
+
+The canonical independent review closed the JavaScript-number reconstruction signature mismatch and late API-completion state race. These are keeper repairs in the pinned revision; no browser dependency change was needed. The P2 healthy-with-missing-epoch issue remains open and service readiness is still blocked.
+
+## Baseline verification
 
 The public SDK is being synchronized to the single current epoch API3 plus fixed-key VRF coordinator. Public exports comprise mapping, current proof/evidence replay, epoch helpers and coordinator/epoch registry ABIs. The consumer Solidity ABI remains minimal. Source and build provenance record canonical Git revisions and hashes.
 

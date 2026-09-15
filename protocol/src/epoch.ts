@@ -7,13 +7,14 @@ import type { XY } from "./verification.ts";
 const abi=AbiCoder.defaultAbiCoder();
 export const EPOCH_LENGTH=200n;
 export const EPOCH_RECIPE_DOMAIN=id("D20_EPOCH_RECIPES");
-export interface EpochCatalog { signers: readonly [string,string]; registry: string; chainId: bigint; firstEpochStart: bigint; }
+export type EpochSigners = readonly [string,string,string,string];
+export interface EpochCatalog { signers: EpochSigners; registry: string; chainId: bigint; firstEpochStart: bigint; }
 export interface EpochRecord { epochHash:string; catalogHash:string; anchorHash:string; source:number | bigint; queryHash:string;
   dataHash:string; attestationHash:string; signedAt:bigint; committedBlock:bigint; }
 export type EpochRequestContext = RequestContext;
 export interface EpochProtocolConfiguration { publicKey:XY; feeRecipient:string; requestFee:bigint; confirmationBlocks:number; registry:string; catalogHash:string; firstEpochStart:bigint; }
-export function epochCatalogHash(signers:readonly [string,string]):string {
-  return keccak256(abi.encode(["bytes32","address[2]"],[EPOCH_RECIPE_DOMAIN,signers]));
+export function epochCatalogHash(signers:EpochSigners):string {
+  return keccak256(abi.encode(["bytes32","address[4]"],[EPOCH_RECIPE_DOMAIN,signers]));
 }
 export function epochStart(firstEpochStart:bigint,epochId:bigint):bigint {
   if(epochId<1n) throw new Error("Invalid epoch"); return firstEpochStart+(epochId-1n)*EPOCH_LENGTH;
@@ -23,9 +24,10 @@ export function selectEpoch(catalog:EpochCatalog,epochId:bigint,anchorHash:strin
   if(epochId<1n||BigInt(anchorHash)===0n) throw new Error("Invalid epoch anchor");
   const catalogHash=epochCatalogHash(catalog.signers);
   const selector=keccak256(abi.encode(["bytes32","bytes32","uint64","bytes32"],[id("D20_EPOCH_SELECT"),catalogHash,epochId,anchorHash]));
-  const source=Number(BigInt(selector)%2n);
+  const source=Number(BigInt(selector)%4n);
   const request=source===0?{operation:"metaAndAssetCtxs",parameters:{dex:""},responseProjection:{symbol:"/0/universe/0/name",value:"/1/0/dayNtlVlm"}}
-    :{operation:"randomNumbers",parameters:{type:"hex8",length:4,size:8}};
+    :source===1?{operation:"randomNumbers",parameters:{type:"hex8",length:4,size:8}}
+    :{operation:"lastTrade",parameters:{assetClass:"crypto",symbol:source===2?"BTCUSD":"ETHUSD"}};
   const canonicalRequest=canonicalApiRequest(request);
   return {source,airnode:catalog.signers[source],selector,canonicalRequest,queryHash:keccak256(toUtf8Bytes(canonicalRequest)),request};
 }
@@ -33,8 +35,10 @@ export function verifyEpochAttestation(selected:ReturnType<typeof selectEpoch>,a
   validateApiSignatureEncoding(a.signature);
   if(a.timestamp>commitTimestamp||commitTimestamp-a.timestamp>120n) throw new Error("Invalid epoch attestation time");
   const body=toUtf8String(a.data);
+  const number="(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?";
   const pattern=selected.source===0?/^\{"symbol":"BTC","value":"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"\}$/
-    :/^\{"success":true,"type":"hex8","length":"4","data":\["[0-9a-f]{16}","[0-9a-f]{16}","[0-9a-f]{16}","[0-9a-f]{16}"\]\}$/;
+    :selected.source===1?/^\{"success":true,"type":"hex8","length":"4","data":\["[0-9a-f]{16}","[0-9a-f]{16}","[0-9a-f]{16}","[0-9a-f]{16}"\]\}$/
+    :new RegExp(`^\\{"symbol":"${selected.source===2?"BTCUSD":"ETHUSD"}","price":${number},"size":${number},"timestamp":[1-9][0-9]{0,15}\\}$`);
   if(getBytes(a.data).length>128||!pattern.test(body)) throw new Error("Invalid exact epoch data");
   const signer=verifyMessage(getBytes(attestationDigest(selected.queryHash,a)),a.signature);
   if(signer.toLowerCase()!==selected.airnode.toLowerCase()) throw new Error("Wrong epoch signer/query");

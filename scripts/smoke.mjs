@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,13 +39,18 @@ writeFileSync(resolve(temp, 'package.json'), JSON.stringify({ name: 'sdk-smoke-c
 console.log(npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', resolve(pkg, packed.filename), 'typescript@5.9.3', 'solc@0.8.28', 'esbuild@0.28.2'], temp));
 copyFileSync(resolve(pkg, 'examples/DiceConsumer.sol'), resolve(temp, 'DiceConsumer.sol'));
 // Actual local-chain inputs with real API3 signatures and Rust proofs; no secret key or prover.
-for (const name of ['epoch-replay.json', 'epoch-replay-anu.json']) copyFileSync(resolve(pkg, 'scripts/fixtures', name), resolve(temp, name));
+const fixtureNames = readdirSync(resolve(pkg, 'scripts/fixtures')).filter(name => /^epoch-replay.*\.json$/.test(name)).sort();
+assert(fixtureNames.length > 0, 'Actual current-recipe fixtures required');
+for (const name of fixtureNames) copyFileSync(resolve(pkg, 'scripts/fixtures', name), resolve(temp, name));
+writeFileSync(resolve(temp, 'fixture-names.json'), JSON.stringify(fixtureNames));
+copyFileSync(resolve(pkg, 'scripts/fixtures/provenance.json'), resolve(temp, 'fixture-provenance.json'));
 copyFileSync(resolve(pkg, 'scripts/consumer-smoke.mjs'), resolve(temp, 'smoke.mjs'));
 writeFileSync(resolve(temp, 'typecheck.ts'), `
 import { builtins, mapRandomness, replayCoordinator, decodeEvidencePacket, type RequestContext } from '@arcdao/vrf-sdk';
 import { coordinatorAbi, epochEntropyAbi } from '@arcdao/vrf-sdk/abi';
-import { replayEpochCommitment, type EpochCatalog } from '@arcdao/vrf-sdk/epoch';
+import { replayEpochCommitment, type EpochCatalog, type EpochSigners } from '@arcdao/vrf-sdk/epoch';
 import { Interface, Contract } from 'ethers';
+const signers: EpochSigners = ['0x0000000000000000000000000000000000000001','0x0000000000000000000000000000000000000002','0x0000000000000000000000000000000000000003','0x0000000000000000000000000000000000000003'];
 type ReplayInput = Parameters<typeof replayCoordinator>[0];
 const values: bigint[] = mapRandomness('0x' + '00'.repeat(32), builtins.d20());
 const coordinator = new Contract('0x0000000000000000000000000000000000000001', coordinatorAbi);

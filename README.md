@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.0`.
+Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.1`.
 
 ## Getting started
 
@@ -20,7 +20,7 @@ The coordinator prices every request from the base fee of the transaction that c
 fee = max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit))
 ```
 
-`pricing()` returns the live `(minFee, feeMultiplier, fulfillGasOverhead)`. The owner can move them with `setPricing(minFee, multiplier, overhead)` (event `PricingChanged`) only within fixed bounds: `minFee` at most 10 USDC (`10e18` wei; native USDC on Arc uses 18 decimals), `feeMultiplier` 0 to 20 where 0 means a flat `minFee`, `fulfillGasOverhead` 100,000 to 2,000,000 gas. Initialization sets multiplier 5 and overhead 300,000; the keeper's deployment configuration (`config/service.json`) sets a 0.08 USDC minimum fee and a 40% keeper share (`keeperFeeBps` 4000). Read the live values instead of hard-coding them; a pricing change never touches requests that are already open, because each request settles from the fee it escrowed.
+`pricing()` returns the live `(minFee, feeMultiplier, fulfillGasOverhead)`. The owner can move them with `setPricing(minFee, multiplier, overhead)` (event `PricingChanged`) only within fixed bounds: `minFee` at most 10 USDC (`10e18` wei; native USDC on Arc uses 18 decimals), `feeMultiplier` 0 to 20 where 0 means a flat `minFee`, `fulfillGasOverhead` 100,000 to 2,000,000 gas. Initialization sets multiplier 5 and overhead 300,000; the keeper's deployment configuration (`config/service.json`) sets a 0.08 USDC minimum fee and a 50% keeper share (`keeperFeeBps` 5000). Read the live values instead of hard-coding them; a pricing change never touches requests that are already open, because each request settles from the fee it escrowed.
 
 Labelled examples with multiplier 5, overhead 300,000 and a 0.08 USDC minimum:
 
@@ -62,7 +62,7 @@ Epochs last 200 blocks. The keeper selects one of four fixed recipes using the c
 
 A request escrows its quoted fee even when its epoch packet is not published yet, and fixes its original block, epoch, client seed, mapping, refund address, `feePaid`, `refundBps` and 60-second deadline. The keeper publishes the saved packet only for live paid demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication; before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
-Timely service is onchain proof acceptance at or before `requestedAt + 60` seconds; a pending transaction is not acceptance. At acceptance the keeper share, `keeperFeeBps` of `feePaid`, is paid to the registry's configured committer (never the proof submitter; a failed transfer becomes keeper credit) and the remainder becomes withdrawable protocol fees. With a 40% share, example A pays 0.1408 USDC to the keeper and 0.2112 USDC to the treasury. Callback failure still earns the fee; `retryCallback(requestId, gasLimit)` redelivers only the same accepted result and never pays a second share.
+Timely service is onchain proof acceptance at or before `requestedAt + 60` seconds; a pending transaction is not acceptance. At acceptance the keeper share, `keeperFeeBps` of `feePaid`, is paid to the registry's configured committer (never the proof submitter; a failed transfer becomes keeper credit) and the remainder becomes withdrawable protocol fees. With a 50% share, example A pays 0.176 USDC to the keeper and 0.176 USDC to the treasury. Callback failure still earns the fee; `retryCallback(requestId, gasLimit)` redelivers only the same accepted result and never pays a second share.
 
 ### Expiry and refunds
 

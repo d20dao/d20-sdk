@@ -35,7 +35,8 @@ assert.equal(metadata.publishConfig.registry, 'https://registry.npmjs.org/');
 const temp = mkdtempSync(resolve(tmpdir(), 'd20dao-sdk-consumer-'));
 console.log(`Fresh consumer: ${temp}`);
 writeFileSync(resolve(temp, 'package.json'), JSON.stringify({ name: 'sdk-smoke-consumer', private: true, type: 'module', overrides: { solc: { tmp: '0.2.7' } } }));
-console.log(npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', resolve(pkg, packed.filename), 'typescript@5.9.3', 'solc@0.8.28', 'esbuild@0.28.2'], temp));
+const installTarget = process.argv.includes('--registry') ? `${metadata.name}@${metadata.version}` : resolve(pkg, packed.filename);
+console.log(npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', installTarget, 'typescript@5.9.3', 'solc@0.8.28', 'esbuild@0.28.2'], temp));
 copyFileSync(resolve(pkg, 'examples/DiceConsumer.sol'), resolve(temp, 'DiceConsumer.sol'));
 // Explicitly selected current fixture provenance distinguishes CI signatures from live API3.
 const activeFixtures = JSON.parse(readFileSync(resolve(pkg, 'scripts/fixtures/active.json'),'utf8'));

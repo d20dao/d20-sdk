@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.1.0`.
+Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.1.1`.
 
 ## Getting started
 
@@ -74,6 +74,19 @@ Fixture provenance distinguishes explicit CI signatures from actual API3 respons
 SDK installation provides consumer and verification tooling. Chain availability, provider quotas, upgrade administration and application settlement remain separate concerns. A healthy process alone does not guarantee a particular request's timely fulfillment.
 
 ## Arc Testnet pilot
+
+Chain ID: **5042002**. Use the **coordinator proxy** when constructing a consumer.
+
+| Contract | Role | Arc Testnet address |
+| --- | --- | --- |
+| D20VRFCoordinator | Consumer entry point / proxy | [`0xd20dA0fDa41f84FCfA3423ae9F96B15910587B4E`](https://testnet.arcscan.app/address/0xd20dA0fDa41f84FCfA3423ae9F96B15910587B4E) |
+| EpochEntropy | Epoch registry / proxy | [`0xd20Da04e4D6d97a762A5b56993d723AA7663F204`](https://testnet.arcscan.app/address/0xd20Da04e4D6d97a762A5b56993d723AA7663F204) |
+| D20CostClient | Restricted pilot consumer / proxy | [`0xD20Da0Ab4F5c258d579D18dC5a6e652266BB9a20`](https://testnet.arcscan.app/address/0xD20Da0Ab4F5c258d579D18dC5a6e652266BB9a20) |
+| D20VRFCoordinator | Implementation | [`0xd20Da05E6bb360edA09a6a360291AB6AD7AA0c58`](https://testnet.arcscan.app/address/0xd20Da05E6bb360edA09a6a360291AB6AD7AA0c58) |
+| EpochEntropy | Implementation | [`0xd20Da0028F2B65d8c8C8512C7029EE02F94E8BF2`](https://testnet.arcscan.app/address/0xd20Da0028F2B65d8c8C8512C7029EE02F94E8BF2) |
+| D20CostClient | Implementation | [`0xd20dA0Ec8d33fB04184CbC13942657bDC1f5Bbc0`](https://testnet.arcscan.app/address/0xd20dA0Ec8d33fB04184CbC13942657bDC1f5Bbc0) |
+
+Addresses are copied from the deployment manifest, including the coordinator upgrade at block 62310349. Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses can change through owner-authorized upgrades. The pilot consumer is test tooling, not a shared application entry point.
 
 A restricted pilot is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Consumer allowlisting is required. The manifest includes the activated refund-notification implementation. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA.
 

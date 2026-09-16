@@ -22,16 +22,23 @@ export function epochStart(firstEpochStart:bigint,epochId:bigint):bigint {
   if(epochId<1n) throw new Error("Invalid epoch"); return firstEpochStart+(epochId-1n)*EPOCH_LENGTH;
 }
 export function epochForBlock(firstEpochStart:bigint,block:bigint):bigint { return block<firstEpochStart?0n:1n+(block-firstEpochStart)/EPOCH_LENGTH; }
-export function selectEpoch(catalog:EpochCatalog,epochId:bigint,anchorHash:string) {
+/// A fallback attempt n uses the source n slots after the selected one, from n × FALLBACK_DELAY_BLOCKS into the epoch.
+export const FALLBACK_DELAY_BLOCKS=20n, MAX_FALLBACK_ATTEMPT=3;
+export function fallbackOpensAt(firstEpochStart:bigint,epochId:bigint,attempt:number):bigint {
+  if(!Number.isInteger(attempt)||attempt<0||attempt>MAX_FALLBACK_ATTEMPT) throw new Error("Invalid fallback attempt");
+  return epochStart(firstEpochStart,epochId)+BigInt(attempt)*FALLBACK_DELAY_BLOCKS;
+}
+export function selectEpoch(catalog:EpochCatalog,epochId:bigint,anchorHash:string,attempt=0) {
   if(epochId<1n||BigInt(anchorHash)===0n) throw new Error("Invalid epoch anchor");
+  if(!Number.isInteger(attempt)||attempt<0||attempt>MAX_FALLBACK_ATTEMPT) throw new Error("Invalid fallback attempt");
   const catalogHash=epochCatalogHash(catalog.signers);
   const selector=keccak256(abi.encode(["bytes32","bytes32","uint64","bytes32"],[id("D20_EPOCH_SELECT"),catalogHash,epochId,anchorHash]));
-  const source=Number(BigInt(selector)%4n);
+  const source=(Number(BigInt(selector)%4n)+attempt)%4;
   const request=source===0?{operation:"metaAndAssetCtxs",parameters:{dex:""},responseProjection:{symbol:"/0/universe/0/name",value:"/1/0/dayNtlVlm"}}
     :source===1?{operation:"randomNumbers",parameters:{type:"hex8",length:4,size:8}}
     :{operation:"lastTrade",parameters:{assetClass:"crypto",symbol:source===2?"BTCUSD":"ETHUSD"}};
   const canonicalRequest=canonicalApiRequest(request);
-  return {source,airnode:catalog.signers[source],selector,canonicalRequest,queryHash:keccak256(toUtf8Bytes(canonicalRequest)),request};
+  return {source,attempt,airnode:catalog.signers[source],selector,canonicalRequest,queryHash:keccak256(toUtf8Bytes(canonicalRequest)),request};
 }
 export function verifyEpochAttestation(selected:ReturnType<typeof selectEpoch>,a:ApiAttestation,commitTimestamp:bigint) {
   validateApiSignatureEncoding(a.signature);
@@ -63,9 +70,11 @@ export function decodeEpochEvidencePacket(packet:string) {
   return {canonicalRequest:canonicalRequest as string,attestation};
 }
 export function replayEpochCommitment(input:{catalog:EpochCatalog;epochId:bigint;record:EpochRecord;commitTimestamp:bigint;packet:string}) {
-  const {catalog,epochId,record}=input, start=epochStart(catalog.firstEpochStart,epochId);
-  if(record.committedBlock<start) throw new Error("Invalid epoch commit block");
-  const selected=selectEpoch(catalog,epochId,record.anchorHash), evidence=decodeEpochEvidencePacket(input.packet);
+  const {catalog,epochId,record}=input;
+  // The committed source fixes the attempt; a fallback is valid only if it was committed after its window opened.
+  const attempt=(Number(record.source)-selectEpoch(catalog,epochId,record.anchorHash).source+4)%4;
+  if(record.committedBlock<fallbackOpensAt(catalog.firstEpochStart,epochId,attempt)) throw new Error("Invalid epoch commit block");
+  const selected=selectEpoch(catalog,epochId,record.anchorHash,attempt), evidence=decodeEpochEvidencePacket(input.packet);
   if(evidence.canonicalRequest!==selected.canonicalRequest) throw new Error("Epoch recipe mismatch");
   const verified=verifyEpochAttestation(selected,evidence.attestation,input.commitTimestamp);
   const epochHash=epochCommitmentHash(catalog,epochId,record.anchorHash,selected.source,selected.queryHash,verified.dataHash,verified.attestationHash);

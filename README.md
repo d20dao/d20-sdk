@@ -58,7 +58,7 @@ await dice.roll(clientSeed, 100_000, { value });
 
 ## Request lifecycle
 
-Epochs last 200 blocks. The keeper selects one of four fixed recipes using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
+Epochs last 200 blocks. The keeper selects one of four fixed recipes using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next source slot in a fixed order can be committed instead, one slot per 20-block window (at most three fallbacks); a saved response is never refreshed or resampled. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
 
 A request escrows its quoted fee even when its epoch packet is not published yet, and fixes its original block, epoch, client seed, mapping, refund address, `feePaid`, `refundBps` and 60-second deadline. The keeper publishes the saved packet only for live paid demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication; before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
@@ -129,17 +129,17 @@ SDK installation provides consumer and verification tooling. Chain availability,
 
 Obtain proxy addresses, implementation addresses and independently checked code hashes from the keeper's deployment manifests, and check that the coordinator implementation at your chain's proxy exposes `quoteFee`/`quoteFeeAt` (its code hash matches the manifest entry for this protocol version) before relying on this SDK's interface. The testnet upgrade to this protocol version and the Arc mainnet deployment are published there when confirmed.
 
-### Arc Testnet pilot
+### Arc Testnet
 
 Chain ID: **5042002**. Use the **coordinator proxy** when constructing a consumer.
 
 | Contract | Role | Arc Testnet address |
 | --- | --- | --- |
-| D20VRFCoordinator | Consumer entry point / proxy | [`0xd20Da07c98F6A64CA20084fD5905abF19F5D84ac`](https://testnet.arcscan.app/address/0xd20Da07c98F6A64CA20084fD5905abF19F5D84ac) |
-| EpochEntropy | Epoch registry / proxy | [`0xd20Da08e4E903cBD2F99fD5F4Be021FC1a9fA496`](https://testnet.arcscan.app/address/0xd20Da08e4E903cBD2F99fD5F4Be021FC1a9fA496) |
-| D20CostClient | Restricted pilot consumer / proxy | [`0xd20dA0e6d4405B40040d458F8010191712E2Cb42`](https://testnet.arcscan.app/address/0xd20dA0e6d4405B40040d458F8010191712E2Cb42) |
-| D20VRFCoordinator | Implementation | [`0xD20da02c34489c8eC68ca1D4FC8fe5ea79ADD223`](https://testnet.arcscan.app/address/0xD20da02c34489c8eC68ca1D4FC8fe5ea79ADD223) |
-| EpochEntropy | Implementation | [`0xD20da079ccEf2CE273b8f2356abccE8c97c73F17`](https://testnet.arcscan.app/address/0xD20da079ccEf2CE273b8f2356abccE8c97c73F17) |
+| D20VRFCoordinator | Consumer entry point / proxy | [`0xd20DA0FF9087d053f0291524Eac12abA1ADBd945`](https://testnet.arcscan.app/address/0xd20DA0FF9087d053f0291524Eac12abA1ADBd945) |
+| EpochEntropy | Epoch registry / proxy | [`0xD20Da00B47A7cD2211dC4683E306913b05903756`](https://testnet.arcscan.app/address/0xD20Da00B47A7cD2211dC4683E306913b05903756) |
+| D20CostClient | Restricted cost client / proxy | [`0xD20da026090B8472579a2B93030F1fC4c94807F1`](https://testnet.arcscan.app/address/0xD20da026090B8472579a2B93030F1fC4c94807F1) |
+| D20VRFCoordinator | Implementation | [`0xD20da0c375cEfCdA65703699A4090237057e9b68`](https://testnet.arcscan.app/address/0xD20da0c375cEfCdA65703699A4090237057e9b68) |
+| EpochEntropy | Implementation | [`0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5`](https://testnet.arcscan.app/address/0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://testnet.arcscan.app/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
 Addresses are copied from the [Arc Testnet deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses change through owner-authorized upgrades, so the implementation rows and code hashes are only valid together with the manifest revision they came from. The pilot consumer is test tooling, not a shared application entry point. The [testnet stress run](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-stress-2026-09-16.json) served 68 paid requests within 2–4 chain seconds, 47 of them in batched fulfillments; measured timings are not an SLA.

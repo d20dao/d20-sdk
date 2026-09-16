@@ -11,6 +11,10 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
     // Attestation freshness at publication; the keeper enforces the same bound before sending.
     uint256 public constant MAX_ATTESTATION_AGE = 240 seconds;
     uint256 public constant MAX_PACKET_BYTES = 2048;
+    // Deterministic source fallback: attempt n commits the source n slots after the selected one, and only once
+    // n × FALLBACK_DELAY_BLOCKS blocks of the epoch have passed. Randomness still binds a later target block hash.
+    uint64 public constant FALLBACK_DELAY_BLOCKS = 20;
+    uint8 public constant MAX_FALLBACK_ATTEMPT = 3;
     bytes32 public constant RECIPE_DOMAIN = keccak256("D20_EPOCH_RECIPES");
     bytes32 public constant SELECT_DOMAIN = keccak256("D20_EPOCH_SELECT");
     bytes32 public constant EPOCH_DOMAIN = keccak256("D20_EPOCH");
@@ -37,6 +41,7 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
     error InvalidConfig(); error InvalidEpoch(); error PreparationClosed(); error AnchorUnavailable();
     error OnlyCommitter(); error AlreadyCommitted(); error InvalidTime(); error InvalidData(); error InvalidSigner();
     error PacketTooLarge(); error RenounceDisabled();
+    error InvalidFallback(); error FallbackNotOpen();
     event EpochCommitted(uint64 indexed epochId, bytes32 indexed epochHash, bytes packet);
     event CommitterChanged(address indexed previousCommitter, address indexed newCommitter);
     event CatalogScheduled(uint64 indexed fromEpoch, bytes32 indexed catalogHash, address[4] signers);
@@ -101,14 +106,24 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         if(anchor==bytes32(0)) revert AnchorUnavailable();
     }
     function getEpoch(uint64 epochId) external view returns(Epoch memory) { return epochs[epochId]; }
-    function getEpochSelection(uint64 epochId) external view returns(Selection memory s) { (s,)=_select(epochId); }
+    function getEpochSelection(uint64 epochId) external view returns(Selection memory s) { (s,)=_select(epochId,0); }
+    /// @notice Source, signer and recipe for a fallback attempt (0 is the selected source).
+    function getEpochFallbackSelection(uint64 epochId,uint8 attempt) external view returns(Selection memory s) {
+        if(attempt>MAX_FALLBACK_ATTEMPT) revert InvalidFallback();
+        (s,)=_select(epochId,attempt);
+    }
+    /// @notice First block at which an attempt may be committed; attempt 0 opens at the epoch start.
+    function fallbackOpensAt(uint64 epochId,uint8 attempt) public view returns(uint64) {
+        if(attempt>MAX_FALLBACK_ATTEMPT) revert InvalidFallback();
+        return epochStart(epochId)+uint64(attempt)*FALLBACK_DELAY_BLOCKS;
+    }
     /// @dev Selection and commitment use the catalog in force for the epoch being selected, not the initial one.
-    function _select(uint64 epochId) private view returns(Selection memory s,bytes32 catalog) {
+    function _select(uint64 epochId,uint8 attempt) private view returns(Selection memory s,bytes32 catalog) {
         bytes32 anchor=_anchor(epochId);
         address[4] memory signers;
         (catalog,signers)=_catalogAt(epochId);
         s.selector=keccak256(abi.encode(SELECT_DOMAIN,catalog,epochId,anchor));
-        s.source=uint8(uint256(s.selector)%4);
+        s.source=uint8((uint256(s.selector)%4+attempt)%4);
         s.airnode=signers[s.source];
         if(s.source==0)s.canonicalRequest='["metaAndAssetCtxs",[["dex",""]],[["symbol","/0/universe/0/name"],["value","/1/0/dayNtlVlm"]]]';
         else if(s.source==1)s.canonicalRequest='["randomNumbers",[["length",4],["size",8],["type","hex8"]]]';
@@ -116,10 +131,17 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         else s.canonicalRequest='["lastTrade",[["assetClass","crypto"],["symbol","ETHUSD"]]]';
         s.queryHash=keccak256(bytes(s.canonicalRequest));
     }
-    function commitEpoch(uint64 epochId, Attestation calldata a) external {
+    function commitEpoch(uint64 epochId, Attestation calldata a) external { _commit(epochId,0,a); }
+    /// @notice Publish the source attempt slots after the selected one once its fallback window is open.
+    function commitEpochFallback(uint64 epochId, uint8 attempt, Attestation calldata a) external {
+        if(attempt==0) revert InvalidFallback();
+        _commit(epochId,attempt,a);
+    }
+    function _commit(uint64 epochId, uint8 attempt, Attestation calldata a) private {
         if(msg.sender!=committer) revert OnlyCommitter();
         if(epochs[epochId].epochHash!=bytes32(0)) revert AlreadyCommitted();
-        (Selection memory s,bytes32 catalog)=_select(epochId);
+        if(block.number<fallbackOpensAt(epochId,attempt)) revert FallbackNotOpen();
+        (Selection memory s,bytes32 catalog)=_select(epochId,attempt);
         if(a.timestamp>block.timestamp||block.timestamp-a.timestamp>MAX_ATTESTATION_AGE) revert InvalidTime();
         _validate(s.source,a.data);
         bytes32 digest=keccak256(abi.encodePacked(s.queryHash,a.timestamp,a.data));

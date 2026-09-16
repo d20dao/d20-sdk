@@ -26,7 +26,7 @@ assert(iface.getEvent('RandomnessRequested').inputs.some(p => p.name === 'feePai
 assert.deepEqual(iface.getEvent('FulfillmentSkipped').inputs.map(p => p.type), ['uint256','uint8']);
 assert.deepEqual(iface.getError('IncorrectFee').inputs.map(p => p.type), ['uint256','uint256']);
 for (const name of ['FeeOverflow','InvalidBatch','NoRefundCredit']) assert(iface.getError(name), name);
-for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpoch','commitEpoch','scheduleCatalog','catalogHashAt','signersAt','catalogHash','MAX_ATTESTATION_AGE']) assert(registry.getFunction(name), name);
+for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpochFallbackSelection','fallbackOpensAt','getEpoch','commitEpoch','commitEpochFallback','scheduleCatalog','catalogHashAt','signersAt','catalogHash','MAX_ATTESTATION_AGE']) assert(registry.getFunction(name), name);
 assert.deepEqual(registry.getFunction('scheduleCatalog').inputs.map(p => p.type), ['address[4]','uint64']);
 assert.deepEqual(registry.getFunction('signersAt').outputs.map(p => p.type), ['address[4]']);
 for (const name of ['EpochCommitted','CatalogScheduled']) assert(registry.getEvent(name), name);

@@ -1,6 +1,6 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "200c5ad4976f487db60561171d7ed5dd63eaa94c",
+  "sourceCommit": "640b60cb992a7e3add1efe8e7b392341732ea004",
   "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
@@ -19,8 +19,8 @@
     "src/replay.ts": "c97a5081e785e6a7f27987e2d4c4d9861fe8fa8cbc775b0152e337141d3d48d7",
     "src/sources.ts": "d8566e7809c67dc51acab3b58fc93d734d098c2eabbaf3657ac910affe12e31e",
     "src/verification.ts": "754e39554c0c432cf1404741503f66b4199b84f39003d8e42f300a7256ffaa6a",
-    "src/epoch.ts": "23bb83fb2b0cfa85b361f9b03ff3aec733b6d6f2b48c524d731159d76310b0b9",
-    "contracts/EpochEntropy.sol": "2ad8023f38e7a39aa1a671f6355e20be651bac9aae256cf9badff6f49b676041",
+    "src/epoch.ts": "41a3d60f063deccc6d19761dc63702a2fdd1efdc46f775b7202241c3eb4d1334",
+    "contracts/EpochEntropy.sol": "bdd4f9e5dab6626572a72a0c15e73b4f3f19c6933b7a122fad237a9784fa3cbb",
     "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286"
   }
 }

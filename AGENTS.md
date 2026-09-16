@@ -32,7 +32,7 @@ Keepers may fulfill up to 16 requests in one fulfillRandomnessBatch transaction.
 
 ## Verification and trust
 
-The four ordered recipe slots are Hyperliquid BTC volume, ANU, TickerLayer BTCUSD and TickerLayer ETHUSD; the latter two share a provider signer. Preserve the entire exact signed response, limited to 128 bytes. Signatures establish wrapper provenance, not unbiased upstream data. At publication an attestation may be at most 240 seconds old (MAX_ATTESTATION_AGE) and never future-dated.
+The four ordered recipe slots are Hyperliquid BTC volume, ANU, TickerLayer BTCUSD and TickerLayer ETHUSD; the latter two share a provider signer. The epoch anchor selects one slot; fallback attempt n (1–3) is the slot n positions later, valid only from n × 20 blocks into the epoch (getEpochFallbackSelection, fallbackOpensAt, commitEpochFallback). replayEpochCommitment derives the attempt from the committed source and rejects a commit block before its window. Preserve the entire exact signed response, limited to 128 bytes. Signatures establish wrapper provenance, not unbiased upstream data. At publication an attestation may be at most 240 seconds old (MAX_ATTESTATION_AGE) and never future-dated.
 
 Signer catalogs are per epoch. The registry owner can schedule a replacement with scheduleCatalog(signers, fromEpoch) at least two epochs ahead (event CatalogScheduled); the current and next epoch, prepared snapshots and open requests keep their signers. Replay must use signersAt(epochId) or the CatalogScheduled history as epoch.catalog.signers, which replayEpochCommitment binds to the record's catalogHash, while configuration.catalogHash stays the initial catalogHash() bound into protocolConfigurationHash.
 

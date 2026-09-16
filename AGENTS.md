@@ -12,7 +12,7 @@ RequestContext binds chainId, effective coordinator proxy, keyHash, requestId, c
 
 Epochs last 200 blocks. The keeper prepares the first validated API3 snapshot locally using the source anchor at epochStart-1. Idle preparation causes no publication transaction. Unused snapshots may remain locally for 50 epochs/10,000 blocks, with live-request and unresolved-transaction protection.
 
-After activation, a consumer escrows the exact requestFee even if its epoch is unpublished. Live allowlisted demand triggers publication of that saved packet. The target becomes max(requestBlock,committedBlock+1); no usable VRF seed exists until that future hash is known. Preserve original request block, epoch, client seed, mapping, recipient and 60-second deadline. Older-epoch demand can settle across a boundary without changing its packet.
+After activation, a consumer escrows the exact requestFee even if its epoch is unpublished. Live paid demand triggers publication of that saved packet. The target becomes max(requestBlock,committedBlock+1); no usable VRF seed exists until that future hash is known. Preserve original request block, epoch, client seed, mapping, recipient and 60-second deadline. Older-epoch demand can settle across a boundary without changing its packet.
 
 Require exact payment and keep caller/request association stable. D20VRFConsumer authenticates the coordinator proxy; verify the expected request and store the raw callback word with minimal work. Mapped requests still callback with bytes32; use getMappedResult or canonical mapping. Keep application actions and payments separate from the callback.
 
@@ -30,7 +30,7 @@ Both service contracts use atomically initialized D20Proxy endpoints with owner-
 
 ## Service boundaries
 
-Always configure the actual chain explicitly; there is no implicit Arc network default. Obtain consumer onboarding and approved proxy/configuration details before live requests. Healthy process status does not guarantee a particular request's timely fulfillment.
+Always configure the actual chain explicitly; there is no implicit Arc network default. Use the correct public deployment proxy and configuration before live requests. Healthy process status does not guarantee a particular request's timely fulfillment.
 
 This SDK holds no signer or bot keys, runs no keeper/prover and exposes no operator API. Optional Telegram access is disabled by default and limited to read-only /status and /keeper in the configured operator chat. Those commands cannot alter configuration or send transactions. Docker provisioning, upgrades, funding and publishing are separate operator actions, not consequences of SDK integration.
 

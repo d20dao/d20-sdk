@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.1.1`.
+Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.1.2`.
 
 ## Getting started
 
@@ -8,7 +8,7 @@ Public replay, mapping, epoch evidence and Solidity consumer helpers for a gener
 npm install @d20dao/vrf-sdk
 ```
 
-Use Node 22.13 or newer and Solidity 0.8.28. Configure the coordinator proxy from the [current deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json), then follow the consumer example below. Arc Testnet is chain 5042002; arrange consumer allowlisting before live requests. Read `requestFee()` at runtime and keep application payments separate.
+Use Node 22.13 or newer and Solidity 0.8.28. Configure the coordinator proxy from the [current deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json), then follow the consumer example below. Arc Testnet is chain 5042002; any consumer contract can request randomness with the current exact fee, without allowlisting. Read `requestFee()` at runtime and keep application payments separate.
 
 For agent-assisted integration, give your agent the installed `AGENTS.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). Website guides include Getting started, Copy prompt, `/llms.txt`, `/llms-full.txt` and `/agents.md`.
 
@@ -16,7 +16,7 @@ For agent-assisted integration, give your agent the installed `AGENTS.md` and `P
 
 Epochs last 200 blocks. The keeper selects one of four fixed recipes using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
 
-After activation, a consumer escrows the exact request fee even when the epoch packet is not published. The request fixes its original block, epoch, client seed, mapping, recipient and 60-second deadline. The keeper publishes the saved packet only for live allowlisted demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication. Before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
+After activation, a consumer escrows the exact request fee even when the epoch packet is not published. The request fixes its original block, epoch, client seed, mapping, recipient and 60-second deadline. The keeper publishes the saved packet only for live paid demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication. Before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
 The four ordered recipe slots are Hyperliquid BTC volume, ANU quantum data, TickerLayer BTCUSD lastTrade and TickerLayer ETHUSD lastTrade. Both TickerLayer slots use the same provider signer and crypto asset class. `EpochSigners` is a readonly four-address tuple. The full exact signed data is limited to 128 bytes and emitted publicly; do not crop or replace it. A signature establishes provider-wrapper provenance, not unbiased upstream data or guaranteed availability.
 
@@ -45,7 +45,7 @@ Solidity imports require compiler 0.8.28 and your compiler's npm resolver:
 
 `examples/DiceConsumer.sol` is one concrete consumer example. It requires exact payment, fixes the player's refund recipient and stores the authenticated raw callback word. Its mapped result is 1 through 20. Mapped callbacks still carry raw bytes32. Keep application actions separate from callbacks; the example does not implement application-payment refunds, claim locking or minting.
 
-Configure the chain explicitly; there is no implicit Arc network default. Pin the effective coordinator proxy address, initialized configuration and implementation history of both service proxies. Obtain keeper consumer onboarding before live requests. A constructor code-length check, SDK installation or permissionless request acceptance does not guarantee service.
+Configure the chain explicitly; there is no implicit Arc network default. Pin the effective coordinator proxy address, initialized configuration and implementation history of both service proxies. Any consumer contract may request by paying the current exact fee. A constructor code-length check, SDK installation or permissionless request acceptance does not guarantee service.
 
 Timely service requires actual onchain proof acceptance at or before original request time +60 seconds. Callback failure still earns the fee; retryCallback redelivers only the same accepted result. Expired unfulfilled requests refund their fixed recipient or receive refund credit. Application-payment refunds remain separate.
 
@@ -88,7 +88,7 @@ Chain ID: **5042002**. Use the **coordinator proxy** when constructing a consume
 
 Addresses are copied from the deployment manifest, including the coordinator upgrade at block 62310349. Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses can change through owner-authorized upgrades. The pilot consumer is test tooling, not a shared application entry point.
 
-A restricted pilot is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Consumer allowlisting is required. The manifest includes the activated refund-notification implementation. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA.
+A public testnet service is deployed on chain 5042002. Obtain current proxy addresses and independently checked code hashes from the [keeper deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Any consumer contract can request service by paying the current exact fee; no allowlist is required. The manifest includes the activated refund-notification implementation. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA.
 
 ## Optional refund notification
 

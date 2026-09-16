@@ -135,14 +135,14 @@ Chain ID: **5042002**. Use the **coordinator proxy** when constructing a consume
 
 | Contract | Role | Arc Testnet address |
 | --- | --- | --- |
-| D20VRFCoordinator | Consumer entry point / proxy | [`0xd20dA0fDa41f84FCfA3423ae9F96B15910587B4E`](https://testnet.arcscan.app/address/0xd20dA0fDa41f84FCfA3423ae9F96B15910587B4E) |
-| EpochEntropy | Epoch registry / proxy | [`0xd20Da04e4D6d97a762A5b56993d723AA7663F204`](https://testnet.arcscan.app/address/0xd20Da04e4D6d97a762A5b56993d723AA7663F204) |
-| D20CostClient | Restricted pilot consumer / proxy | [`0xD20Da0Ab4F5c258d579D18dC5a6e652266BB9a20`](https://testnet.arcscan.app/address/0xD20Da0Ab4F5c258d579D18dC5a6e652266BB9a20) |
-| D20VRFCoordinator | Implementation | [`0xd20Da05E6bb360edA09a6a360291AB6AD7AA0c58`](https://testnet.arcscan.app/address/0xd20Da05E6bb360edA09a6a360291AB6AD7AA0c58) |
-| EpochEntropy | Implementation | [`0xd20Da0028F2B65d8c8C8512C7029EE02F94E8BF2`](https://testnet.arcscan.app/address/0xd20Da0028F2B65d8c8C8512C7029EE02F94E8BF2) |
-| D20CostClient | Implementation | [`0xd20dA0Ec8d33fB04184CbC13942657bDC1f5Bbc0`](https://testnet.arcscan.app/address/0xd20dA0Ec8d33fB04184CbC13942657bDC1f5Bbc0) |
+| D20VRFCoordinator | Consumer entry point / proxy | [`0xd20Da07c98F6A64CA20084fD5905abF19F5D84ac`](https://testnet.arcscan.app/address/0xd20Da07c98F6A64CA20084fD5905abF19F5D84ac) |
+| EpochEntropy | Epoch registry / proxy | [`0xd20Da08e4E903cBD2F99fD5F4Be021FC1a9fA496`](https://testnet.arcscan.app/address/0xd20Da08e4E903cBD2F99fD5F4Be021FC1a9fA496) |
+| D20CostClient | Restricted pilot consumer / proxy | [`0xd20dA0e6d4405B40040d458F8010191712E2Cb42`](https://testnet.arcscan.app/address/0xd20dA0e6d4405B40040d458F8010191712E2Cb42) |
+| D20VRFCoordinator | Implementation | [`0xD20da02c34489c8eC68ca1D4FC8fe5ea79ADD223`](https://testnet.arcscan.app/address/0xD20da02c34489c8eC68ca1D4FC8fe5ea79ADD223) |
+| EpochEntropy | Implementation | [`0xD20da079ccEf2CE273b8f2356abccE8c97c73F17`](https://testnet.arcscan.app/address/0xD20da079ccEf2CE273b8f2356abccE8c97c73F17) |
+| D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://testnet.arcscan.app/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
-Addresses are copied from the [Arc Testnet deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json), including the coordinator upgrade at block 62310349. Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses change through owner-authorized upgrades, so the implementation rows and code hashes are only valid together with the manifest revision they came from. The pilot consumer is test tooling, not a shared application entry point. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA.
+Addresses are copied from the [Arc Testnet deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-testnet.json). Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses change through owner-authorized upgrades, so the implementation rows and code hashes are only valid together with the manifest revision they came from. The pilot consumer is test tooling, not a shared application entry point. The [small-sample measurements](https://github.com/d20dao/keeper/blob/main/docs/benchmarks/arc-testnet-pilot-2026-09-15.json) cover proof acceptance, same-result callback repair and expired-request refunds; they are not an SLA.
 
 ## Optional refund notification
 

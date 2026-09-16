@@ -14,6 +14,8 @@ const manifest = {
   packageLockSha256: sha256(readFileSync(resolve(pkg, 'package-lock.json'))),
   buildDependencies: {},
   sources: {},
+  // SDK-owned TypeScript outside the vendored protocol copy (src/), hashed for the record but not provenance-checked.
+  packageSources: {},
 };
 const read = path => {
   const bytes = readFileSync(resolve(repo, path));
@@ -30,9 +32,18 @@ for (const name of ['.generated', 'dist', 'abi', 'contracts', 'notices']) {
   rmSync(target, { recursive: true, force: true });
 }
 const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'epoch'];
+const sdkModules = ['fees'];
+const toEsm = source => source.replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.js$2');
+// The public root entry is the protocol index plus these SDK-owned exports appended verbatim.
+const rootExports = 'export { quoteRequestFee, DEFAULT_FEE_BUFFER_BPS } from "./fees.js";\nexport type { FeeQuote, FeeQuoteOptions, FeeQuoteProvider } from "./fees.js";\n';
 for (const name of modules) {
   // Mechanical module-specifier conversion only; protocol implementation remains canonical in repo/src.
-  put(`.generated/${name}.ts`, read(`src/${name}.ts`).replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.js$2'));
+  put(`.generated/${name}.ts`, toEsm(read(`src/${name}.ts`)) + (name === 'index' ? rootExports : ''));
+}
+for (const name of sdkModules) {
+  const bytes = readFileSync(resolve(pkg, `src/${name}.ts`));
+  manifest.packageSources[`src/${name}.ts`] = sha256(bytes);
+  put(`.generated/${name}.ts`, toEsm(bytes.toString()));
 }
 const input = {
   language: 'Solidity', sources: {
@@ -62,7 +73,7 @@ put('abi/EpochEntropy.json', JSON.stringify(epochEntropyAbi, null, 2) + '\n');
 put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\n`);
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
   strict: true, skipLibCheck: false, declaration: true, rootDir: resolve(pkg, '.generated'), outDir: resolve(pkg, 'dist'), types: [], noEmitOnError: true };
-const program = ts.createProgram([...modules, 'abi'].map(n => resolve(pkg, `.generated/${n}.ts`)), options);
+const program = ts.createProgram([...modules, ...sdkModules, 'abi'].map(n => resolve(pkg, `.generated/${n}.ts`)), options);
 const result = program.emit();
 const diagnostics = [...ts.getPreEmitDiagnostics(program), ...result.diagnostics];
 if (diagnostics.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, { getCurrentDirectory: () => pkg, getCanonicalFileName: f => f, getNewLine: () => '\n' }));

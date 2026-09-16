@@ -23,10 +23,10 @@ const dry = packedInfo(['pack', '--dry-run', '--json']);
 const packed = packedInfo(['pack', '--json']);
 assert.deepEqual(dry.files.map(f => f.path), packed.files.map(f => f.path));
 const required = ['AGENTS.md', 'LICENSE', 'README.md', 'BUILD-MANIFEST.json', 'PROTOCOL-PROVENANCE.json', 'dist/index.js', 'dist/index.d.ts',
-  'dist/abi.js', 'dist/abi.d.ts', 'dist/epoch.js', 'dist/epoch.d.ts', 'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json', 'examples/DiceConsumer.sol', 'notices/CHAINLINK-LICENSE'];
+  'dist/abi.js', 'dist/abi.d.ts', 'dist/epoch.js', 'dist/epoch.d.ts', 'dist/fees.js', 'dist/fees.d.ts', 'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json', 'examples/DiceConsumer.sol', 'notices/CHAINLINK-LICENSE'];
 for (const name of required) assert(packed.files.some(f => f.path === name), `Missing ${name}`);
 for (const { path } of packed.files) {
-  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|epoch|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol|examples\/MiningRandomnessConsumer\.sol)|examples\/DiceConsumer\.sol|notices\/(?:CHAINLINK-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
+  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|epoch|fees|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol|examples\/MiningRandomnessConsumer\.sol)|examples\/DiceConsumer\.sol|notices\/(?:CHAINLINK-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
 }
 const metadata = JSON.parse(readFileSync(resolve(pkg, 'package.json')));
 assert.notEqual(metadata.private, true);
@@ -49,16 +49,21 @@ writeFileSync(resolve(temp, 'fixture-names.json'), JSON.stringify(fixtureNames))
 copyFileSync(resolve(fixtureDirectory, 'provenance.json'), resolve(temp, 'fixture-provenance.json'));
 copyFileSync(resolve(pkg, 'scripts/consumer-smoke.mjs'), resolve(temp, 'smoke.mjs'));
 writeFileSync(resolve(temp, 'typecheck.ts'), `
-import { builtins, mapRandomness, replayCoordinator, decodeEvidencePacket, type RequestContext } from '@d20dao/vrf-sdk';
+import { builtins, mapRandomness, replayCoordinator, decodeEvidencePacket, quoteRequestFee, DEFAULT_FEE_BUFFER_BPS, type RequestContext, type EpochProtocolConfiguration, type FeeQuote, type FeeQuoteProvider } from '@d20dao/vrf-sdk';
 import { coordinatorAbi, epochEntropyAbi } from '@d20dao/vrf-sdk/abi';
-import { replayEpochCommitment, type EpochCatalog, type EpochSigners } from '@d20dao/vrf-sdk/epoch';
-import { Interface, Contract } from 'ethers';
+import { replayEpochCommitment, MAX_ATTESTATION_AGE, type EpochCatalog, type EpochSigners } from '@d20dao/vrf-sdk/epoch';
+import { Interface, Contract, JsonRpcProvider } from 'ethers';
 const signers: EpochSigners = ['0x0000000000000000000000000000000000000001','0x0000000000000000000000000000000000000002','0x0000000000000000000000000000000000000003','0x0000000000000000000000000000000000000003'];
 type ReplayInput = Parameters<typeof replayCoordinator>[0];
+type InitialMinFee = EpochProtocolConfiguration['initialMinFee'];
 const values: bigint[] = mapRandomness('0x' + '00'.repeat(32), builtins.d20());
 const coordinator = new Contract('0x0000000000000000000000000000000000000001', coordinatorAbi);
 const registry = new Interface(epochEntropyAbi);
-console.log(values, coordinator, registry);
+// Type-only: a real ethers provider satisfies FeeQuoteProvider; nothing here is executed.
+const provider: FeeQuoteProvider = new JsonRpcProvider('http://127.0.0.1:8545');
+const quote: Promise<FeeQuote> = quoteRequestFee(provider, '0x0000000000000000000000000000000000000001', 100_000, { bufferBps: DEFAULT_FEE_BUFFER_BPS });
+const age: bigint = MAX_ATTESTATION_AGE;
+console.log(values, coordinator, registry, quote, age);
 `);
 writeFileSync(resolve(temp, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, noEmit: true, skipLibCheck: false, types: [] }, files: ['typecheck.ts'] }));
 execFileSync(process.execPath, [resolve(temp, 'node_modules/typescript/bin/tsc'), '-p', resolve(temp, 'tsconfig.json')], { cwd: temp, stdio: 'inherit' });

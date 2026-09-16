@@ -105,6 +105,35 @@ for (const f of fixtures) assert.deepEqual(browser.replayCoordinator(f),sdk.repl
 assert.deepEqual(browser.coordinatorAbi,coordinatorAbi);
 assert.deepEqual(browser.epochEntropyAbi,epochEntropyAbi);
 assert.deepEqual(browser.decodeEvidencePacket(packet).proof,canonicalProof(fixture.vrfProof));
+// Off-chain fee quoting against a mock provider (no network): header base fee in, quoteFeeAt at the actual and buffered base fee out.
+const gwei = 10n**9n, pricing = { minFee: 8n*10n**16n, multiplier: 5n, overhead: 300_000n }, coordinatorAddress = '0x000000000000000000000000000000000000d20d';
+const quoteAt = (gas, base) => { const dynamic = pricing.multiplier*base*(pricing.overhead+gas); return dynamic > pricing.minFee ? dynamic : pricing.minFee; };
+const calls = [];
+const mockProvider = (baseFeePerGas, number = 123) => ({
+ async getBlock(tag) { calls.push(['getBlock', tag]); return { number, baseFeePerGas }; },
+ async call(tx) {
+  assert.equal(tx.to, coordinatorAddress);
+  const [gas, base] = iface.decodeFunctionData('quoteFeeAt', tx.data); // decodes only if the helper sends the canonical selector/encoding
+  calls.push(['call', gas, base]);
+  return iface.encodeFunctionResult('quoteFeeAt', [quoteAt(gas, base)]);
+ },
+});
+const high = await sdk.quoteRequestFee(mockProvider(176n*gwei), coordinatorAddress, 100_000);
+assert.equal(high.fee, 5n*176n*gwei*400_000n); // 0.352 USDC at 176 gwei with 100k callback gas
+assert.equal(high.baseFee, 176n*gwei); assert.equal(high.bufferBps, 3000n); assert.equal(high.bufferedBaseFee, 176n*gwei*13n/10n);
+assert.equal(high.value, 5n*(176n*gwei*13n/10n)*400_000n); assert(high.value > high.fee); assert.equal(high.blockNumber, 123);
+assert.deepEqual(calls, [['getBlock','latest'],['call',100_000n,176n*gwei],['call',100_000n,176n*gwei*13n/10n]]);
+const low = await sdk.quoteRequestFee(mockProvider(20n*gwei), coordinatorAddress, 100_000n);
+assert.equal(low.fee, pricing.minFee); assert.equal(low.value, pricing.minFee); // the minimum dominates: nothing extra is sent
+calls.length = 0;
+const custom = await sdk.quoteRequestFee(mockProvider(176n*gwei), coordinatorAddress, 100_000, { bufferBps: 0, blockTag: 'pending' });
+assert.equal(custom.value, custom.fee); assert.equal(custom.bufferBps, 0n); assert.deepEqual(calls[0], ['getBlock','pending']);
+assert.deepEqual(await browser.quoteRequestFee(mockProvider(176n*gwei), coordinatorAddress, 100_000), high);
+assert.equal(sdk.DEFAULT_FEE_BUFFER_BPS, 3000n);
+await assert.rejects(sdk.quoteRequestFee({ async getBlock() { return { number: 1, baseFeePerGas: null }; }, async call() { throw new Error('unreachable'); } }, coordinatorAddress, 100_000), /baseFeePerGas/);
+await assert.rejects(sdk.quoteRequestFee({ async getBlock() { return { number: 1, baseFeePerGas: 1n }; }, async call() { return '0x'; } }, coordinatorAddress, 100_000), /no data/);
+await assert.rejects(sdk.quoteRequestFee(mockProvider(1n), coordinatorAddress, 2n**32n), /uint32/);
+await assert.rejects(sdk.quoteRequestFee(mockProvider(1n), coordinatorAddress, 100_000, { bufferBps: -1 }), /negative/);
 const input={language:'Solidity',sources:{'DiceConsumer.sol':{content:readFileSync('DiceConsumer.sol','utf8')},'MiningImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol";'},
  'RequestsImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol";'}},settings:{optimizer:{enabled:true,runs:200},evmVersion:'cancun',outputSelection:{'*':{'*':['abi','evm.bytecode.object']}}}};
 const compiled=JSON.parse(solc.compile(JSON.stringify(input),{import:p=>{try{if(!p.startsWith('@d20dao/vrf-sdk/')||p.includes('..'))throw new Error('unexpected import');return {contents:readFileSync(resolve('node_modules',p),'utf8')};}catch(e){return {error:e.message};}}}));
@@ -122,4 +151,4 @@ consumer.forEachFunction(fragment=>{
  assert.deepEqual(coordinator.outputs.map(p=>p.format('sighash')),fragment.outputs.map(p=>p.format('sighash')));
 });
 console.log(fixtureProvenance.sourceMode+' recipe fixture coverage: '+coveredSources.join(', '));
-console.log('Current epoch/VRF replay, ABI, strict TypeScript, browser-target bundle ('+bundle.outputFiles[0].contents.length+' bytes) and Solidity checks passed.');
+console.log('Current epoch/VRF replay, ABI, off-chain fee quoting, strict TypeScript, browser-target bundle ('+bundle.outputFiles[0].contents.length+' bytes) and Solidity checks passed.');

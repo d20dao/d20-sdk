@@ -11,10 +11,27 @@ import { coordinatorAbi, epochEntropyAbi } from '@d20dao/vrf-sdk/abi';
 const iface = new Interface(coordinatorAbi), registry = new Interface(epochEntropyAbi);
 assert.deepEqual(coordinatorAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/D20VRFCoordinator.json')));
 assert.deepEqual(epochEntropyAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/EpochEntropy.json')));
-for (const name of ['requestFee','requestMappedRandomness','refundRequest','retryCallback','getRequest','epochRegistry','retryRefundCallback','refundCallbackDelivered']) assert(iface.getFunction(name));
-assert(iface.getEvent('RefundCallbackAttempted'));
-for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpoch','commitEpoch']) assert(registry.getFunction(name));
-assert(registry.getEvent('EpochCommitted'));
+for (const name of ['quoteFee','quoteFeeAt','pricing','setPricing','requestFeePaid','requestRefundBps','setRefundBps','withdrawRefundCredit','refundCredits','initialMinFee','fulfillRandomnessBatch',
+ 'requestRandomness','requestMappedRandomness','refundRequest','retryCallback','getRequest','epochRegistry','retryRefundCallback','refundCallbackDelivered','keeperFeeBps',
+ 'MAX_FULFILL_BATCH','MAX_MIN_FEE','MAX_FEE_MULTIPLIER','MIN_FULFILL_GAS_OVERHEAD','MAX_FULFILL_GAS_OVERHEAD','MIN_REFUND_BPS','RESPONSE_TIMEOUT']) assert(iface.getFunction(name), name);
+// requestFee() is gone: the fee depends on the callback gas limit and the base fee of the requesting transaction.
+assert(!iface.hasFunction('requestFee'));
+assert.deepEqual(iface.getFunction('quoteFee').inputs.map(p => p.type), ['uint32']);
+assert.deepEqual(iface.getFunction('quoteFeeAt').inputs.map(p => p.type), ['uint32','uint256']);
+assert.deepEqual(iface.getFunction('pricing').outputs.map(p => p.type), ['uint256','uint16','uint32']);
+assert.deepEqual(iface.getFunction('setPricing').inputs.map(p => p.type), ['uint256','uint16','uint32']);
+assert.deepEqual(iface.getFunction('fulfillRandomnessBatch').inputs.map(p => p.baseType), ['array','array']);
+for (const name of ['RefundCallbackAttempted','PricingChanged','RefundBpsChanged','FeeOverpaymentCredited','FulfillmentSkipped','RequestRefundedTo','RefundCreditWithdrawn','KeeperFeePaid']) assert(iface.getEvent(name), name);
+assert(iface.getEvent('RandomnessRequested').inputs.some(p => p.name === 'feePaid'), 'RandomnessRequested must carry the charged fee');
+assert.deepEqual(iface.getEvent('FulfillmentSkipped').inputs.map(p => p.type), ['uint256','uint8']);
+assert.deepEqual(iface.getError('IncorrectFee').inputs.map(p => p.type), ['uint256','uint256']);
+for (const name of ['FeeOverflow','InvalidBatch','NoRefundCredit']) assert(iface.getError(name), name);
+for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpoch','commitEpoch','scheduleCatalog','catalogHashAt','signersAt','catalogHash','MAX_ATTESTATION_AGE']) assert(registry.getFunction(name), name);
+assert.deepEqual(registry.getFunction('scheduleCatalog').inputs.map(p => p.type), ['address[4]','uint64']);
+assert.deepEqual(registry.getFunction('signersAt').outputs.map(p => p.type), ['address[4]']);
+for (const name of ['EpochCommitted','CatalogScheduled']) assert(registry.getEvent(name), name);
+for (const abi of [iface,registry]) { assert(abi.getFunction('renounceOwnership')); assert(abi.getError('RenounceDisabled')); }
+assert.equal(epoch.MAX_ATTESTATION_AGE, 240n);
 assert(iface.getEvent('FulfillmentEvidence'));
 assert.equal(iface.getFunction('fulfillRandomness').inputs.length, 2);
 const requestOutputs = JSON.stringify(iface.getFunction('getRequest').outputs);
@@ -36,8 +53,15 @@ assert(requestOutputs.includes('requestBlock') && requestOutputs.includes('targe
 assert(fixtures.some(f => epoch.epochForBlock(f.configuration.firstEpochStart,f.acceptanceBlock) > f.context.epochId), 'Fixture set must replay a request accepted across an epoch boundary');
 for (const f of fixtures) {
  assert.equal(f.epoch.catalog.signers.length,4);
+ assert.equal(typeof f.configuration.initialMinFee, 'bigint');
+ assert(!('requestFee' in f.configuration), 'Fixtures carry the initialize() fee as initialMinFee');
  const evidence = epoch.decodeEpochEvidencePacket(f.epoch.packet);
  assert(getBytes(evidence.attestation.data).length <= 128);
+ // Attestations may be up to MAX_ATTESTATION_AGE (240 s) old at publication; the replayed catalog binds record.catalogHash.
+ const commitment = {...f.epoch, epochId: f.context.epochId};
+ assert.equal(epoch.replayEpochCommitment({...commitment, commitTimestamp: evidence.attestation.timestamp + 240n}).epochHash, f.context.epochHash);
+ assert.throws(() => epoch.replayEpochCommitment({...commitment, commitTimestamp: evidence.attestation.timestamp + 241n}), /attestation time/);
+ assert.throws(() => epoch.replayEpochCommitment({...commitment, catalog: {...f.epoch.catalog, signers: [...f.epoch.catalog.signers.slice(0,3), f.epoch.catalog.signers[0]]}}));
  const replayed = sdk.replayCoordinator(f);
  assert.equal(replayed.reveal.randomness,f.recorded.randomness);
  assert.equal(sdk.deriveRequestSeed(f.context),f.vrfProof.seed);
@@ -47,6 +71,7 @@ const result = sdk.replayCoordinator(fixture);
 assert.equal(result.reveal.randomness, fixture.recorded.randomness);
 assert.equal(sdk.deriveRequestSeed(fixture.context), fixture.vrfProof.seed);
 assert.equal(sdk.epochProtocolConfigurationHash(fixture.configuration), fixture.protocolConfigurationHash);
+assert.notEqual(sdk.epochProtocolConfigurationHash({...fixture.configuration, initialMinFee: fixture.configuration.initialMinFee + 1n}), fixture.protocolConfigurationHash);
 const packet = sdk.encodeEvidencePacket(fixture.vrfProof);
 assert.equal(getBytes(packet).length, 416);
 assert.equal(getBytes(iface.encodeFunctionData('fulfillRandomness',[fixture.context.requestId,fixture.vrfProof])).length,452);
@@ -80,11 +105,17 @@ for (const f of fixtures) assert.deepEqual(browser.replayCoordinator(f),sdk.repl
 assert.deepEqual(browser.coordinatorAbi,coordinatorAbi);
 assert.deepEqual(browser.epochEntropyAbi,epochEntropyAbi);
 assert.deepEqual(browser.decodeEvidencePacket(packet).proof,canonicalProof(fixture.vrfProof));
-const input={language:'Solidity',sources:{'DiceConsumer.sol':{content:readFileSync('DiceConsumer.sol','utf8')},'MiningImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol";'}},settings:{optimizer:{enabled:true,runs:200},evmVersion:'cancun',outputSelection:{'*':{'*':['abi','evm.bytecode.object']}}}};
+const input={language:'Solidity',sources:{'DiceConsumer.sol':{content:readFileSync('DiceConsumer.sol','utf8')},'MiningImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol";'},
+ 'RequestsImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol";'}},settings:{optimizer:{enabled:true,runs:200},evmVersion:'cancun',outputSelection:{'*':{'*':['abi','evm.bytecode.object']}}}};
 const compiled=JSON.parse(solc.compile(JSON.stringify(input),{import:p=>{try{if(!p.startsWith('@d20dao/vrf-sdk/')||p.includes('..'))throw new Error('unexpected import');return {contents:readFileSync(resolve('node_modules',p),'utf8')};}catch(e){return {error:e.message};}}}));
 assert.deepEqual((compiled.errors??[]).filter(e=>e.severity==='error'),[]);
 assert(compiled.contracts['DiceConsumer.sol'].DiceConsumer.evm.bytecode.object.length>0);
+assert(compiled.contracts['@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol'].D20VRFRequests);
+const dice=new Interface(compiled.contracts['DiceConsumer.sol'].DiceConsumer.abi);
+assert.equal(dice.getFunction('roll').payable,true);
+assert.equal(dice.getError('WrongFee'), null, 'The example forwards msg.value; the coordinator enforces the quote and credits any excess');
 const consumer=new Interface(compiled.contracts['@d20dao/vrf-sdk/contracts/interfaces/ID20VRF.sol'].ID20VRF.abi);
+assert(consumer.getFunction('quoteFee') && consumer.getFunction('quoteFeeAt') && !consumer.hasFunction('requestFee'));
 consumer.forEachFunction(fragment=>{
  const coordinator=iface.getFunction(fragment.format('sighash'));assert(coordinator);
  assert.equal(coordinator.selector,fragment.selector);assert.equal(coordinator.stateMutability,fragment.stateMutability);

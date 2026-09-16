@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.1.2`.
+Public replay, mapping, epoch evidence and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.2.0`.
 
 ## Getting started
 

@@ -6,13 +6,15 @@ import type { MappingSpec } from "./mapping.ts";
 import type { XY } from "./verification.ts";
 const abi=AbiCoder.defaultAbiCoder();
 export const EPOCH_LENGTH=200n;
+export const MAX_ATTESTATION_AGE=240n;
 export const EPOCH_RECIPE_DOMAIN=id("D20_EPOCH_RECIPES");
 export type EpochSigners = readonly [string,string,string,string];
 export interface EpochCatalog { signers: EpochSigners; registry: string; chainId: bigint; firstEpochStart: bigint; }
 export interface EpochRecord { epochHash:string; catalogHash:string; anchorHash:string; source:number | bigint; queryHash:string;
   dataHash:string; attestationHash:string; signedAt:bigint; committedBlock:bigint; }
 export type EpochRequestContext = RequestContext;
-export interface EpochProtocolConfiguration { publicKey:XY; feeRecipient:string; requestFee:bigint; confirmationBlocks:number; registry:string; catalogHash:string; firstEpochStart:bigint; }
+/// initialMinFee is the fee argument of initialize, bound into the configuration hash; live pricing (setPricing) never changes it.
+export interface EpochProtocolConfiguration { publicKey:XY; feeRecipient:string; initialMinFee:bigint; confirmationBlocks:number; registry:string; catalogHash:string; firstEpochStart:bigint; }
 export function epochCatalogHash(signers:EpochSigners):string {
   return keccak256(abi.encode(["bytes32","address[4]"],[EPOCH_RECIPE_DOMAIN,signers]));
 }
@@ -33,7 +35,7 @@ export function selectEpoch(catalog:EpochCatalog,epochId:bigint,anchorHash:strin
 }
 export function verifyEpochAttestation(selected:ReturnType<typeof selectEpoch>,a:ApiAttestation,commitTimestamp:bigint) {
   validateApiSignatureEncoding(a.signature);
-  if(a.timestamp>commitTimestamp||commitTimestamp-a.timestamp>120n) throw new Error("Invalid epoch attestation time");
+  if(a.timestamp>commitTimestamp||commitTimestamp-a.timestamp>MAX_ATTESTATION_AGE) throw new Error("Invalid epoch attestation time");
   const body=toUtf8String(a.data);
   const number="(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?";
   const pattern=selected.source===0?/^\{"symbol":"BTC","value":"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"\}$/
@@ -73,7 +75,7 @@ export function replayEpochCommitment(input:{catalog:EpochCatalog;epochId:bigint
 }
 export function epochProtocolConfigurationHash(c:EpochProtocolConfiguration):string {
   return keccak256(abi.encode(["bytes32","uint256[2]","address","uint256","uint16","address","bytes32","uint64","uint64"],
-    [id("D20_VRF_CONFIG"),c.publicKey,c.feeRecipient,c.requestFee,c.confirmationBlocks,c.registry,c.catalogHash,c.firstEpochStart,EPOCH_LENGTH]));
+    [id("D20_VRF_CONFIG"),c.publicKey,c.feeRecipient,c.initialMinFee,c.confirmationBlocks,c.registry,c.catalogHash,c.firstEpochStart,EPOCH_LENGTH]));
 }
 export function epochTranscriptHash(c:EpochRequestContext,configurationHash:string,proofHash:string,randomness:string):string {
   return keccak256(abi.encode(["bytes32","uint256","address","uint256","bytes32","bytes32","bytes32","bytes32","bytes32","uint64","bytes32"],
@@ -81,12 +83,15 @@ export function epochTranscriptHash(c:EpochRequestContext,configurationHash:stri
 }
 /// Canonical blocks, transaction inclusion/timestamps and the proxy implementation code active
 /// at each receipt must be independently trusted chain context. A proxy code hash alone is insufficient.
+/// The signer catalog is per epoch: epoch.catalog.signers must be the catalog in force for context.epochId
+/// (CatalogScheduled events or signersAt on the registry); replayEpochCommitment binds them to record.catalogHash,
+/// while configuration.catalogHash remains the initial catalog bound into protocolConfigurationHash.
 export function replayEpochCoordinator(input:{context:EpochRequestContext;configuration:EpochProtocolConfiguration;protocolConfigurationHash:string;
   epoch:{catalog:EpochCatalog;record:EpochRecord;commitTimestamp:bigint;packet:string};requestedAt:bigint;deadline:bigint;acceptanceTimestamp:bigint;acceptanceBlock:bigint;
   vrfProof:VRFProof;recorded:{fulfilled:boolean;randomness:string;proofHash:string;transcriptHash:string}}) {
   const c=input.context, cfg=input.configuration, e=input.epoch;
   const epoch=replayEpochCommitment({...e,epochId:c.epochId});
-  if(e.catalog.registry.toLowerCase()!==cfg.registry.toLowerCase()||e.catalog.chainId!==c.chainId||e.catalog.firstEpochStart!==cfg.firstEpochStart||epochCatalogHash(e.catalog.signers)!==cfg.catalogHash||epoch.epochHash!==c.epochHash||epochForBlock(cfg.firstEpochStart,c.requestBlock)!==c.epochId) throw new Error("Epoch request binding mismatch");
+  if(e.catalog.registry.toLowerCase()!==cfg.registry.toLowerCase()||e.catalog.chainId!==c.chainId||e.catalog.firstEpochStart!==cfg.firstEpochStart||epoch.epochHash!==c.epochHash||epochForBlock(cfg.firstEpochStart,c.requestBlock)!==c.epochId) throw new Error("Epoch request binding mismatch");
   const expectedTarget=c.requestBlock>e.record.committedBlock+1n?c.requestBlock:e.record.committedBlock+1n;
   if(c.targetBlock!==expectedTarget||e.record.committedBlock>=c.targetBlock) throw new Error("Invalid future randomness block");
   if(hashPublicKey(cfg.publicKey)!==c.keyHash||epochProtocolConfigurationHash(cfg)!==input.protocolConfigurationHash) throw new Error("Protocol configuration mismatch");

@@ -25,7 +25,7 @@
       "88166831356626186178414913298033275054086243781277878360288998796587140930350"
     ],
     "feeRecipient": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-    "requestFee": "123",
+    "initialMinFee": "123",
     "confirmationBlocks": 1,
     "registry": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
     "catalogHash": "0x2fabf49d5cdb3f455f3c44222d9f68a6051eb326be9de34d75e3935737f1d289",

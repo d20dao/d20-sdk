@@ -8,6 +8,8 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeab
 /// @notice Fixed market/quantum recipes, published on demand for each 200-block epoch.
 contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
     uint64 public constant EPOCH_LENGTH = 200;
+    // Attestation freshness at publication; the keeper enforces the same bound before sending.
+    uint256 public constant MAX_ATTESTATION_AGE = 240 seconds;
     uint256 public constant MAX_PACKET_BYTES = 2048;
     bytes32 public constant RECIPE_DOMAIN = keccak256("D20_EPOCH_RECIPES");
     bytes32 public constant SELECT_DOMAIN = keccak256("D20_EPOCH_SELECT");
@@ -25,15 +27,19 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         bytes32 epochHash; bytes32 catalogHash; bytes32 anchorHash; uint8 source;
         bytes32 queryHash; bytes32 dataHash; bytes32 attestationHash; uint256 signedAt; uint64 committedBlock;
     }
+    struct CatalogVersion { uint64 fromEpoch; bytes32 hash; address[4] signers; }
     mapping(uint64 => Epoch) private epochs;
     mapping(uint64 => bytes32) public epochAnchors;
+    // Scheduled signer catalogs ascending by fromEpoch; epochs before the first entry use the initial catalog above.
+    CatalogVersion[] private catalogVersions;
     // Preserve all declared fields/mapping value layouts; consume reserved slots when extending.
-    uint256[40] private __gap;
+    uint256[39] private __gap;
     error InvalidConfig(); error InvalidEpoch(); error PreparationClosed(); error AnchorUnavailable();
     error OnlyCommitter(); error AlreadyCommitted(); error InvalidTime(); error InvalidData(); error InvalidSigner();
-    error PacketTooLarge();
+    error PacketTooLarge(); error RenounceDisabled();
     event EpochCommitted(uint64 indexed epochId, bytes32 indexed epochHash, bytes packet);
     event CommitterChanged(address indexed previousCommitter, address indexed newCommitter);
+    event CatalogScheduled(uint64 indexed fromEpoch, bytes32 indexed catalogHash, address[4] signers);
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() { _disableInitializers(); }
     function initialize(address[4] memory signers, address initialOwner, address initialCommitter) external initializer {
@@ -45,10 +51,33 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         catalogHash=keccak256(abi.encode(RECIPE_DOMAIN,signers));
     }
     function _authorizeUpgrade(address) internal override onlyOwner {}
+    /// @notice Upgrade authority can only move through the two-step transfer; it can never be abandoned.
+    function renounceOwnership() public view override onlyOwner { revert RenounceDisabled(); }
 
     function setCommitter(address next) external onlyOwner {
         if(next==address(0)) revert InvalidConfig();
         emit CommitterChanged(committer,next); committer=next;
+    }
+    /// @notice Schedule a signer catalog for epochs >= fromEpoch, at least two epochs ahead; a pending version is replaced.
+    /// @dev catalogHash() and the slot getters keep the initial catalog, so protocolConfigurationHash and keeper pins never move.
+    function scheduleCatalog(address[4] calldata signers, uint64 fromEpoch) external onlyOwner {
+        if(signers[0]==address(0)||signers[1]==address(0)||signers[2]==address(0)||signers[3]==address(0)) revert InvalidConfig();
+        uint64 current=epochForBlock(block.number);
+        if(fromEpoch<current+2) revert InvalidEpoch();
+        uint256 count=catalogVersions.length;
+        if(count!=0&&catalogVersions[count-1].fromEpoch>current) catalogVersions.pop();
+        bytes32 hash=keccak256(abi.encode(RECIPE_DOMAIN,signers));
+        catalogVersions.push(CatalogVersion(fromEpoch,hash,signers));
+        emit CatalogScheduled(fromEpoch,hash,signers);
+    }
+    function catalogHashAt(uint64 epochId) external view returns(bytes32 hash) { (hash,)=_catalogAt(epochId); }
+    function signersAt(uint64 epochId) external view returns(address[4] memory signers) { (,signers)=_catalogAt(epochId); }
+    function _catalogAt(uint64 epochId) private view returns(bytes32,address[4] memory) {
+        for(uint256 i=catalogVersions.length;i>0;--i) {
+            CatalogVersion storage v=catalogVersions[i-1];
+            if(epochId>=v.fromEpoch) return (v.hash,v.signers);
+        }
+        return (catalogHash,[hyperliquidSigner,anuSigner,btcTradeSigner,ethTradeSigner]);
     }
     function epochStart(uint64 epochId) public view returns(uint64) {
         if(epochId==0) revert InvalidEpoch();
@@ -72,21 +101,26 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         if(anchor==bytes32(0)) revert AnchorUnavailable();
     }
     function getEpoch(uint64 epochId) external view returns(Epoch memory) { return epochs[epochId]; }
-    function getEpochSelection(uint64 epochId) public view returns(Selection memory s) {
+    function getEpochSelection(uint64 epochId) external view returns(Selection memory s) { (s,)=_select(epochId); }
+    /// @dev Selection and commitment use the catalog in force for the epoch being selected, not the initial one.
+    function _select(uint64 epochId) private view returns(Selection memory s,bytes32 catalog) {
         bytes32 anchor=_anchor(epochId);
-        s.selector=keccak256(abi.encode(SELECT_DOMAIN,catalogHash,epochId,anchor));
+        address[4] memory signers;
+        (catalog,signers)=_catalogAt(epochId);
+        s.selector=keccak256(abi.encode(SELECT_DOMAIN,catalog,epochId,anchor));
         s.source=uint8(uint256(s.selector)%4);
-        if(s.source==0){s.airnode=hyperliquidSigner;s.canonicalRequest='["metaAndAssetCtxs",[["dex",""]],[["symbol","/0/universe/0/name"],["value","/1/0/dayNtlVlm"]]]';}
-        else if(s.source==1){s.airnode=anuSigner;s.canonicalRequest='["randomNumbers",[["length",4],["size",8],["type","hex8"]]]';}
-        else if(s.source==2){s.airnode=btcTradeSigner;s.canonicalRequest='["lastTrade",[["assetClass","crypto"],["symbol","BTCUSD"]]]';}
-        else {s.airnode=ethTradeSigner;s.canonicalRequest='["lastTrade",[["assetClass","crypto"],["symbol","ETHUSD"]]]';}
+        s.airnode=signers[s.source];
+        if(s.source==0)s.canonicalRequest='["metaAndAssetCtxs",[["dex",""]],[["symbol","/0/universe/0/name"],["value","/1/0/dayNtlVlm"]]]';
+        else if(s.source==1)s.canonicalRequest='["randomNumbers",[["length",4],["size",8],["type","hex8"]]]';
+        else if(s.source==2)s.canonicalRequest='["lastTrade",[["assetClass","crypto"],["symbol","BTCUSD"]]]';
+        else s.canonicalRequest='["lastTrade",[["assetClass","crypto"],["symbol","ETHUSD"]]]';
         s.queryHash=keccak256(bytes(s.canonicalRequest));
     }
     function commitEpoch(uint64 epochId, Attestation calldata a) external {
         if(msg.sender!=committer) revert OnlyCommitter();
         if(epochs[epochId].epochHash!=bytes32(0)) revert AlreadyCommitted();
-        Selection memory s=getEpochSelection(epochId);
-        if(a.timestamp>block.timestamp||block.timestamp-a.timestamp>120) revert InvalidTime();
+        (Selection memory s,bytes32 catalog)=_select(epochId);
+        if(a.timestamp>block.timestamp||block.timestamp-a.timestamp>MAX_ATTESTATION_AGE) revert InvalidTime();
         _validate(s.source,a.data);
         bytes32 digest=keccak256(abi.encodePacked(s.queryHash,a.timestamp,a.data));
         if(ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(digest),a.signature)!=s.airnode) revert InvalidSigner();
@@ -94,9 +128,9 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         bytes32 attestationHash=keccak256(abi.encode(s.queryHash,a.timestamp,dataHash,keccak256(a.signature)));
         bytes32 anchor=checkpointEpoch(epochId);
         // Request randomness always uses a block strictly after this commitment.
-        bytes32 commitment=keccak256(abi.encode(EPOCH_DOMAIN,block.chainid,address(this),catalogHash,epochId,
+        bytes32 commitment=keccak256(abi.encode(EPOCH_DOMAIN,block.chainid,address(this),catalog,epochId,
             epochStart(epochId),anchor,s.source,s.queryHash,dataHash,attestationHash));
-        epochs[epochId]=Epoch(commitment,catalogHash,anchor,s.source,s.queryHash,dataHash,attestationHash,a.timestamp,uint64(block.number));
+        epochs[epochId]=Epoch(commitment,catalog,anchor,s.source,s.queryHash,dataHash,attestationHash,a.timestamp,uint64(block.number));
         bytes memory packet=abi.encode(s.canonicalRequest,a);
         if(packet.length>MAX_PACKET_BYTES) revert PacketTooLarge();
         emit EpochCommitted(epochId,commitment,packet);

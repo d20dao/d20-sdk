@@ -34,5 +34,6 @@
       "fulfillmentTransactionHash": "0x55beb4ce7e3246e49c9b44e24182d14132bc1d751028fa843e095bcb48b38be7"
     }
   },
-  "canonicalProtocolCommit": "dcca615b3e07f273e45fa5596f80b63da241896a"
+  "canonicalProtocolCommit": "dcca615b3e07f273e45fa5596f80b63da241896a",
+  "migration": "configuration.requestFee was renamed to configuration.initialMinFee when the vendored protocol moved to keeper commit 200c5ad4976f487db60561171d7ed5dd63eaa94c (initialMinFee is the same initialize() fee argument at the same position and ABI encoding of the configuration hash). Values, protocolConfigurationHash and every other fixture byte are unchanged; the trace was not regenerated."
 }

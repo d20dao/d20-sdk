@@ -27,7 +27,8 @@ abstract contract MiningRandomnessConsumer is D20VRFConsumer {
         if (claimRandomness[claimId].requested) revert ClaimAlreadyRequested();
         claimRandomness[claimId].requested = true;
         ID20VRF rng = ID20VRF(vrfCoordinator);
-        requestId = rng.requestRandomness{value: rng.requestFee()}(
+        // The same-transaction quote is exact; only off-chain senders need a buffer.
+        requestId = rng.requestRandomness{value: rng.quoteFee(callbackGasLimit)}(
             keccak256(abi.encode(claimId, lockedWork)), callbackGasLimit, refundAddress
         );
         claimRandomness[claimId].requestId = requestId;

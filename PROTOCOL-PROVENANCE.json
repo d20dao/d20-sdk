@@ -1,14 +1,14 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "d7e785dda57499220bd37d73bc6fad9226872dcc",
+  "sourceCommit": "200c5ad4976f487db60561171d7ed5dd63eaa94c",
   "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
     "contracts/D20VRFConsumer.sol": "9200fcd8825756ba6978e42d94b52e82e6dea9b1ba35dc506652490194e16162",
-    "contracts/D20VRFCoordinator.sol": "4f9f842e6b5cb024f4113af566172a0ef62973644ef91aae48d0caf48c301afa",
-    "contracts/examples/MiningRandomnessConsumer.sol": "0a5d573266dbd3e531464cb795901e0f0060b9f6fbf9c7a52853f722093eb6a5",
-    "contracts/interfaces/ID20VRF.sol": "a9897086d751339b237e11c70bf99034080c75e5cf7876f2c9147e09d61f48fb",
-    "contracts/libraries/D20VRFRequests.sol": "8f0ee77eefd45d0667f9cd67f2db149850cd1f0da3bf5133335f8323cd5ea6d4",
+    "contracts/D20VRFCoordinator.sol": "f2c17545fe39323a39aef8a4e642965f5a607ba547365da0b542b5277be4dd2c",
+    "contracts/examples/MiningRandomnessConsumer.sol": "2f5c19d05e66bea313fff65269650fe1e3bea70bd6aa80fa3e3de8bee8c24649",
+    "contracts/interfaces/ID20VRF.sol": "0361aee07644cbf7c2bcde8ffd9188825d5be633c4a1520169a7702a38c1bdbc",
+    "contracts/libraries/D20VRFRequests.sol": "f87e66f7eb0350d9b8740f120b97085957793b826b81a0c7c80d58a3fcd92b76",
     "contracts/libraries/RandomnessMapping.sol": "00bce68c1a6d89903d72d1c3f9ee5e1a56392188ed29b6aa32ab7451ef180c91",
     "contracts/vendor/CHAINLINK-LICENSE": "25a502f8fd39602de8a98cc4835a4bf81851b095d6f2c5c130bf0863afac6c99",
     "contracts/vendor/PROVENANCE.md": "e6da392378851c47574ef808c9c7e17dea50054ffd0cae7a9070f76f8eed60f2",
@@ -19,8 +19,8 @@
     "src/replay.ts": "c97a5081e785e6a7f27987e2d4c4d9861fe8fa8cbc775b0152e337141d3d48d7",
     "src/sources.ts": "d8566e7809c67dc51acab3b58fc93d734d098c2eabbaf3657ac910affe12e31e",
     "src/verification.ts": "754e39554c0c432cf1404741503f66b4199b84f39003d8e42f300a7256ffaa6a",
-    "src/epoch.ts": "2e49f7906d55d9edc144ae4ee142608d5629bc68d6596d0f4f424ebaa62d823a",
-    "contracts/EpochEntropy.sol": "23fd4d040a6f3800a6edf8f9ace1c251f47975728b9a86d7874cd0bc7abe9972",
+    "src/epoch.ts": "23bb83fb2b0cfa85b361f9b03ff3aec733b6d6f2b48c524d731159d76310b0b9",
+    "contracts/EpochEntropy.sol": "2ad8023f38e7a39aa1a671f6355e20be651bac9aae256cf9badff6f49b676041",
     "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286"
   }
 }

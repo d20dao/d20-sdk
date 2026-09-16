@@ -6,6 +6,7 @@ import {RandomnessMapping as M} from "./RandomnessMapping.sol";
 
 /// @notice Built-in request helpers for game contracts. All requests still callback with (id, rawWord).
 /// @dev Usage: using D20VRFRequests for ID20VRF; rng.d20(options). Inspect getMappedResult(id) after fulfillment.
+///      Each helper pays the exact same-transaction quote from the calling contract balance.
 library D20VRFRequests {
     struct Options { bytes32 clientSeed; uint32 callbackGasLimit; address refundAddress; }
     function diceRoll(ID20VRF rng, uint256 sides, uint32 count, Options memory o) internal returns (uint256) {
@@ -36,6 +37,6 @@ library D20VRFRequests {
         return _send(rng, M.Spec(M.Operation.Shuffle, 0, 0, population, population), o);
     }
     function _send(ID20VRF rng, M.Spec memory spec, Options memory o) private returns (uint256) {
-        return rng.requestMappedRandomness{value: rng.requestFee()}(o.clientSeed, o.callbackGasLimit, o.refundAddress, spec);
+        return rng.requestMappedRandomness{value: rng.quoteFee(o.callbackGasLimit)}(o.clientSeed, o.callbackGasLimit, o.refundAddress, spec);
     }
 }

@@ -4,7 +4,11 @@ pragma solidity 0.8.28;
 import {RandomnessMapping} from "../libraries/RandomnessMapping.sol";
 
 interface ID20VRF {
-    function requestFee() external view returns (uint256);
+    /// @notice Exact fee for a request sent in this same transaction. Through eth_call the base fee is often reported as 0,
+    ///         so off-chain senders must quote with quoteFeeAt and the latest header baseFeePerGas plus a buffer.
+    function quoteFee(uint32 callbackGasLimit) external view returns (uint256);
+    /// @notice max(minFee, feeMultiplier * baseFee * (fulfillGasOverhead + callbackGasLimit)) over the current parameters.
+    function quoteFeeAt(uint32 callbackGasLimit, uint256 baseFee) external view returns (uint256);
     function requestRandomness(bytes32 clientSeed, uint32 callbackGasLimit, address _refundAddress)
         external payable returns (uint256 requestId);
     function requestMappedRandomness(

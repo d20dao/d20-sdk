@@ -14,7 +14,7 @@ assert.deepEqual(epochEntropyAbi, JSON.parse(readFileSync('node_modules/@d20dao/
 for (const name of ['quoteFee','quoteFeeAt','pricing','setPricing','requestFeePaid','requestRefundBps','setRefundBps','withdrawRefundCredit','refundCredits','initialMinFee','fulfillRandomnessBatch',
  'requestRandomness','requestMappedRandomness','refundRequest','retryCallback','getRequest','epochRegistry','retryRefundCallback','refundCallbackDelivered','keeperFeeBps',
  'MAX_FULFILL_BATCH','MAX_MIN_FEE','MAX_FEE_MULTIPLIER','MIN_FULFILL_GAS_OVERHEAD','MAX_FULFILL_GAS_OVERHEAD','MIN_REFUND_BPS','RESPONSE_TIMEOUT']) assert(iface.getFunction(name), name);
-// requestFee() is gone: the fee depends on the callback gas limit and the base fee of the requesting transaction.
+// The fee depends on the callback gas limit and the base fee of the requesting transaction.
 assert(!iface.hasFunction('requestFee'));
 assert.deepEqual(iface.getFunction('quoteFee').inputs.map(p => p.type), ['uint32']);
 assert.deepEqual(iface.getFunction('quoteFeeAt').inputs.map(p => p.type), ['uint32','uint256']);

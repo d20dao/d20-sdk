@@ -1,20 +1,44 @@
 # d20dao consumer-agent guide
 
-Use this guide when integrating @d20dao/vrf-sdk into an application or interpreting its public evidence. Install with `npm install @d20dao/vrf-sdk`. The package provides a general randomness interface; dice and mining contracts are examples. Read installed declarations for exact types and match the packaged PROTOCOL-PROVENANCE.json to the deployment being used.
+Use this guide when integrating @d20dao/vrf-sdk into an application or interpreting its public evidence. Install with `npm install @d20dao/vrf-sdk` (0.3.3 or newer). The package provides a general randomness interface; dice and mining contracts are examples. Read installed declarations for exact types and match the packaged PROTOCOL-PROVENANCE.json to the deployment being used.
+
+## Networks and toolchain
+
+Arc Mainnet: chain 5042, live service, RPC https://rpc.mainnet.arc.io, explorer https://explorer.arc.io, D20DAO explorer https://arc.d20dao.org, manifest https://d20dao.org/deployments/arc-mainnet.json. Arc Testnet: chain 5042002, development, RPC https://rpc.testnet.arc.io, explorer https://testnet.arcscan.app, D20DAO explorer https://arc-testnet.d20dao.org, manifest https://d20dao.org/deployments/arc-testnet.json. Native USDC (18 decimals) pays gas and request fees; test USDC comes from the faucet linked at https://docs.arc.io/arc/references/connect-to-arc. Use Node 22.13+, solc 0.8.28 and evmVersion cancun. Hardhat resolves `@d20dao/vrf-sdk/contracts/...` from node_modules; Foundry needs the remapping `@d20dao/vrf-sdk/=node_modules/@d20dao/vrf-sdk/`. Consumer sources need no OpenZeppelin. Website guides: https://d20dao.org/docs, index https://d20dao.org/llms.txt. Public protocol source: the SDK repository's protocol/ folder (https://github.com/d20dao/d20-sdk/tree/main/protocol); the keeper repository named in PROTOCOL-PROVENANCE.json is not public.
 
 ## Public interfaces
 
 Import builtins, mapRandomness, decodeEvidencePacket, replayCoordinator and quoteRequestFee from @d20dao/vrf-sdk. Epoch helpers and MAX_ATTESTATION_AGE also have an /epoch entrypoint. Import coordinatorAbi and epochEntropyAbi from /abi. Solidity consumers use D20VRFConsumer, ID20VRF, D20VRFRequests and RandomnessMapping under /contracts with compiler 0.8.28. ID20VRF exposes quoteFee(callbackGasLimit), quoteFeeAt(callbackGasLimit, baseFee), requestRandomness(clientSeed, callbackGasLimit, refundAddress), requestMappedRandomness(..., spec) and getMappedResult(requestId).
 
+The package is ESM only, for Node and bundlers; bundle it (Vite, webpack, esbuild) for browsers. quoteRequestFee expects an ethers v6 provider (or getBlock/call with ethers-v6 shapes); with other clients read the latest header baseFeePerGas, add a buffer and call quoteFeeAt. Never quote with quoteFee through eth_call, which reports a base fee of 0.
+
 RequestContext binds chainId, effective coordinator proxy, keyHash, requestId, consumer, clientSeed, mapping, requestBlock, targetBlock, blockHash, epochId and epochHash. Consult Parameters<typeof replayCoordinator>[0] for the complete trusted replay input. configuration.feeRecipient uses the initialized initialFeeRecipient and configuration.initialMinFee the initialize fee argument (getter initialMinFee), not the live payout address or pricing.
+
+## Randomness options
+
+Spec is (operation, lower, upper, count, population). Solidity helpers (`using D20VRFRequests for ID20VRF`, `o = D20VRFRequests.Options(clientSeed, callbackGasLimit, refundAddress)`) return the request ID and pay quoteFee from the contract balance; TypeScript builtins return the same spec.
+
+- Raw (0): requestRandomness / builtins.raw(); result [uint256(word)].
+- DiceRoll (1): rng.diceRoll(sides, count, o), dN(sides, o), d4/d6/d8/d10/d12/d20(o); builtins.diceRoll(sides, count), dN(sides), d4()…d20(); sides ≥ 2, count 1–128; each value 1–sides, repeats possible.
+- CoinFlip (2): rng.coinFlip(o) / builtins.coinFlip(); 0 tails, 1 heads.
+- NumberRange (3): rng.numberRange(min, max, o) / builtins.numberRange(min, max); min ≤ max over uint256; one value in [min, max].
+- ChooseOne (4): rng.chooseOne(population, o) / builtins.chooseOne(size); population 1–256; one zero-based index.
+- ChooseMany (5): rng.chooseMany(population, count, o) / builtins.chooseMany(size, count); count 1–population; distinct indices.
+- Shuffle (6): rng.shuffle(population, o) / builtins.shuffle(size); population 1–256; a permutation of all indices.
+
+Invalid specs revert with InvalidMapping (throw in TypeScript). Callbacks always receive the raw bytes32 word. Freeze any item list before a choice or shuffle.
 
 ## Pricing and payment
 
-fee = max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit)), evaluated with the base fee of the requesting transaction. pricing() returns the live (minFee, feeMultiplier, fulfillGasOverhead); the owner may change them within bounds (minFee at most 10 USDC in 18-decimal native units, multiplier 0–20 where 0 is a flat minFee, overhead 100,000–2,000,000 gas) and emits PricingChanged. Initialization sets multiplier 5 and overhead 300,000; the deployment configuration sets a 0.08 USDC minimum and a 50% keeper share (keeperFeeBps 5000). Examples at those parameters: at 176 gwei with 100,000 callback gas the fee is 5 × 176 gwei × 400,000 = 0.352 USDC; at 20 gwei the dynamic part is 0.04 USDC, so the 0.08 USDC minimum applies. Read live values; never hard-code a price.
+fee = max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit)), evaluated with the base fee of the requesting transaction. pricing() returns the live (minFee, feeMultiplier, fulfillGasOverhead); the owner may change them within bounds (minFee at most 10 USDC in 18-decimal native units, multiplier 0–20 where 0 is a flat minFee, overhead 100,000–2,000,000 gas) and emits PricingChanged. Both Arc deployments were initialized with a 0.08 USDC minimum fee, multiplier 5, overhead 300,000 gas and a 50% keeper share (keeperFeeBps 5000); these are initialization values, not fixed prices. Examples at those parameters: at 176 gwei with 100,000 callback gas the fee is 5 × 176 gwei × 400,000 = 0.352 USDC; at 20 gwei the dynamic part is 0.04 USDC, so the 0.08 USDC minimum applies. Read live values; never hard-code a price.
 
 Send msg.value >= fee. Less reverts with IncorrectFee(expected, actual). Exactly the quote is escrowed (requestFeePaid, emitted as feePaid in RandomnessRequested); any excess is credited to the refund address as refund credit (FeeOverpaymentCredited, refundCredits) and only that address can pull it with withdrawRefundCredit(recipient). Choose a refund address that can call withdrawRefundCredit or receive a plain native transfer.
 
 A contract that requests in the same transaction pays quoteFee(callbackGasLimit), which is exact; D20VRFRequests helpers and MiningRandomnessConsumer do this from the contract balance. A wallet or backend must pay through a consumer contract (requests from EOAs revert) and must never quote quoteFee through eth_call: the base fee is commonly reported as 0 there (verified on Arc mainnet), the quote collapses to minFee and the transaction reverts. Quote with quoteFeeAt(callbackGasLimit, latestBlock.baseFeePerGas) plus a buffer and forward the whole amount. quoteRequestFee(provider, coordinator, callbackGasLimit, { bufferBps = 3000 }) does this with ethers 6: fee is the quote at the block's base fee, value is the quote at a base fee bufferBps higher (equal to fee when the minimum dominates); send value. The buffer covers base-fee movement until inclusion; the excess is refund credit, never revenue. On IncorrectFee, quote again and resend.
+
+Recommended consumer pattern: in the requesting function read fee = quoteFee(callbackGasLimit), require msg.value >= fee, pay exactly fee, return msg.value - fee to the caller and use the paying user as refund address. Forwarding msg.value instead (examples/DiceConsumer.sol) leaves the buffer as refund credit that the refund address must withdraw separately; paying from the contract balance needs the application's own funding policy.
+
+clientSeed need not be unique or secret: the VRF seed also binds chain, coordinator, key hash, the incrementing request ID, consumer, mapping, request/target block, target hash and epoch. Use it to bind application context, for example keccak256(abi.encode(msg.sender, operationId)) or an item-list commitment.
 
 ## Request lifecycle
 
@@ -22,11 +46,15 @@ Epochs last 200 blocks. The keeper prepares the first validated API3 snapshot lo
 
 A request escrows its quoted fee even if its epoch is unpublished and fixes its request block, epoch, client seed, mapping, refund address, feePaid, refundBps and 60-second deadline. Live paid demand triggers publication of the saved packet. The target becomes max(requestBlock, committedBlock+1); no usable VRF seed exists until that future hash is known. Older-epoch demand can settle across a boundary without changing its packet.
 
-D20VRFConsumer authenticates the coordinator proxy; verify the expected request and store the raw callback word with minimal work. Mapped requests still callback with bytes32; use getMappedResult or canonical mapping. Keep application actions and payments separate from the callback.
+D20VRFConsumer authenticates the coordinator proxy; verify the expected request and store the raw callback word with minimal work. callbackGasLimit is 30,000–1,000,000 (InvalidCallbackGas otherwise) and is forwarded exactly to rawFulfillRandomness. Mapped requests still callback with bytes32; use getMappedResult or canonical mapping. Keep application actions and payments separate from the callback.
 
-Valid onchain acceptance at or before requestedAt+60 seconds is timely. A pending transaction is not acceptance. At acceptance keeperFeeBps of feePaid goes to the configured registry committer, not the proof submitter (a failed transfer becomes keeper credit), and the remainder becomes protocol fees. Callback failure still earns the fee; retryCallback redelivers only the same accepted result and cannot pay a second share.
+Valid onchain acceptance at or before requestedAt+60 seconds is timely. A pending transaction is not acceptance. Single requests are normally fulfilled within a few seconds on Arc; in a stress test 200 simultaneous requests were delivered within 36 seconds (median 19 seconds). Timings are not an SLA. At acceptance keeperFeeBps of feePaid goes to the configured registry committer, not the proof submitter (a failed transfer becomes keeper credit), and the remainder becomes protocol fees. Callback failure still earns the fee; retryCallback redelivers only the same accepted result and cannot pay a second share.
+
+Read results from coordinator events (RandomnessRequested carries requestId; RandomnessFulfilled, CallbackAttempted, RequestRefundedTo, RefundCallbackAttempted) or poll getRequest(requestId): fields consumer, callbackGasLimit, requestBlock, targetBlock, deadline, refundAddress, clientSeed, mappingHash, blockHash, randomness, proofHash, transcriptHash, fulfilled, delivered, refunded, epochId, epochHash. getMapping(requestId) returns the stored Spec; getMappedResult(requestId) returns uint256[] and reverts NotFulfilled before acceptance; mapRandomness(randomness, spec) is a pure mapping of any word. Only getMappedResult is in ID20VRF; the rest are in coordinatorAbi. A request unfulfilled after its deadline can only be refunded.
 
 After the deadline, anyone may call refundRequest(requestId). It pays feePaid × requestRefundBps / 10000 using the ratio snapshotted at request time (default 100%; the owner may lower it to no less than 50% for future requests only, event RefundBpsChanged) to the fixed refund address, or records it as that address's refund credit if the 30,000-gas transfer fails; the remainder is retained as protocol fees. Gas and application payments are separate.
+
+Recovery calls revert with InsufficientCallbackGas instead of forwarding less gas. Measured minimum transaction gas limits: refundRequest 302,558–357,517 (use 400,000); retryCallback about 1.032 × gasLimit + 184,300 (use gasLimit + 250,000); retryRefundCallback about 1.032 × gasLimit + 89,800 with gasLimit 100,000–1,000,000 (use gasLimit + 150,000). eth_estimateGas finds these minimums.
 
 Keepers may fulfill up to 16 requests in one fulfillRandomnessBatch transaction. Each served request emits the same per-request events and evidence as a single fulfillment and settles from its own feePaid; members already fulfilled, refunded or past their deadline emit FulfillmentSkipped(requestId, reason) with reason 1, 2 or 3, and any proof or readiness failure reverts the batch. Consumers see no difference. Indexers must rely on per-request events, not transaction calldata.
 
@@ -40,14 +68,20 @@ Decode epoch evidence using its trusted registry/event context and decodeEvidenc
 
 Both service contracts use atomically initialized D20Proxy endpoints with owner-authorized UUPS upgrades and two-step ownership; renounceOwnership reverts on both. Implementations are locked against initialization. The owner can rotate committer and fee recipient, adjust the keeper share, tune bounded pricing, lower the refund ratio for future requests and schedule future catalogs; no setter rewrites a request, a published epoch or the VRF key. Upgrade authority is trusted. Verify the implementation history of BOTH coordinator and registry; stable proxy addresses alone do not identify executed code. Operator pins stop processing on unreviewed changes while preserving recovery data.
 
+The contracts have not had an external security audit; the coordinator's "Prototype: not audited or validated on Arc" source comment is unchanged because the source is part of deployed bytecode metadata, and the service is live on Arc Mainnet. On Arc Mainnet the owner of both proxies is the DAO treasury Safe 0xB57f656149749eff6b496dF090336491f977E744. The VRF key holder can withhold a proof, which leads to a refund, but cannot substitute another result for a fixed seed.
+
 ## Service boundaries
 
-Always configure the actual chain explicitly; there is no implicit Arc network default. Take proxy addresses and code hashes from the keeper's deployment manifest for that chain and confirm the coordinator implementation exposes quoteFee/quoteFeeAt before live requests. Healthy process status does not guarantee a particular request's timely fulfillment.
+Always configure the actual chain explicitly; there is no implicit Arc network default. Take proxy addresses and code hashes from the public deployment manifest for that chain (https://d20dao.org/deployments/arc-mainnet.json or https://d20dao.org/deployments/arc-testnet.json) and confirm the coordinator implementation exposes quoteFee/quoteFeeAt before live requests. Healthy process status does not guarantee a particular request's timely fulfillment.
 
 This SDK holds no signer or bot keys, runs no keeper/prover and exposes no operator API. Optional Telegram access is disabled by default and limited to read-only /status and /keeper in the configured operator chat. Those commands cannot alter configuration or send transactions. Docker provisioning, upgrades, funding and publishing are separate operator actions, not consequences of SDK integration.
+
+## Examples
+
+examples/DiceConsumer.sol (installed at @d20dao/vrf-sdk/examples/DiceConsumer.sol): player-paid d20 request forwarding msg.value, player as refund address, refund hook. contracts/examples/MiningRandomnessConsumer.sol (source protocol/contracts/examples/): abstract claim consumer paying quoteFee from its balance, one request per claim, candidate seeds from the stored word. The README's Recommended payment pattern shows D20Game, which pays the exact quote and returns change.
 
 ## Optional refund notification
 
 After refundRequest has paid the fixed refund address or recorded its refund credit, the coordinator calls `onRefund(requestId)` on the original consumer. Extend `D20VRFConsumer` and override `_onRefund(uint256 requestId)` to update application state; the base authenticates the coordinator. The callback only carries the request ID and does not imply that the consumer itself received money. Application assets and fees remain the application's responsibility.
 
-The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook cannot undo the fee settlement. After failure, `retryRefundCallback(requestId, gasLimit)` retries the notification without another payment; successful delivery is recorded by `refundCallbackDelivered(requestId)`. Refund/retry needs sufficient outer gas. Never request new randomness from within either callback; use a separate application transaction.
+The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook cannot undo the fee settlement. After failure, `retryRefundCallback(requestId, gasLimit)` retries the notification without another payment; successful delivery is recorded by `refundCallbackDelivered(requestId)`. Refund/retry needs sufficient outer gas (see the recovery gas figures above). Never request new randomness from within either callback; use a separate application transaction.

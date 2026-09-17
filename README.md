@@ -80,7 +80,7 @@ With either tool, `import {D20VRFConsumer} from "@d20dao/vrf-sdk/contracts/D20VR
 
 ### Callback gas limit
 
-`callbackGasLimit` must be between 30,000 and 1,000,000 gas (`MIN_CALLBACK_GAS`, `MAX_CALLBACK_GAS`); other values revert with `InvalidCallbackGas`. The coordinator calls `rawFulfillRandomness(requestId, randomness)` with exactly that much gas, and the fee grows with it (see [Pricing](#pricing)). If the callback reverts or runs out of gas, the request is still served and paid (`CallbackAttempted(requestId, false, gasLimit)`, `delivered` stays false); anyone can call `retryCallback(requestId, gasLimit)` with a limit no lower than the original and at most 1,000,000. Keep the callback to authentication, a request check and a few storage writes (a new storage slot costs about 22,100 gas); the examples use 100,000. Computing a large mapping, such as a 256-item shuffle, inside the callback needs much more.
+`callbackGasLimit` must be between 30,000 and 1,000,000 gas (`MIN_CALLBACK_GAS`, `MAX_CALLBACK_GAS`); other values revert with `InvalidCallbackGas`. The coordinator calls `rawFulfillRandomness(requestId, randomness)` with exactly that much gas, and the fee grows with it (see [Pricing](#pricing)). If the callback reverts or runs out of gas, the request is still served and paid (`CallbackAttempted(requestId, false, gasLimit)`, `delivered` stays false); anyone can call `retryCallback(requestId, gasLimit)` with a limit no lower than the original and at most 1,000,000. Keep the callback to authentication, a request check and a few storage writes (a new storage slot costs about 22,100 gas); the examples use 100,000. As a reference, a consumer that stores the word, the fulfillment block and time and two index entries per result measured about 51,000 gas per callback once its slots were in use and about 105,000 gas for its first result, when every slot was new. Measure your own callback with `eth_estimateGas` or a local test, add a margin, and remember that the fee grows with the limit. Computing a large mapping, such as a 256-item shuffle, inside the callback needs much more.
 
 ## Randomness options
 
@@ -252,6 +252,23 @@ for (;;) {
 - `quoteRequestFee(provider, coordinator, callbackGasLimit, options)` expects an ethers v6 provider such as `JsonRpcProvider` or `BrowserProvider`, or any object with ethers-v6-shaped `getBlock(tag)` (with `baseFeePerGas` as `bigint`) and `call(tx)`. With viem or another client, repeat its steps: read the latest block's `baseFeePerGas`, add the buffer and call `quoteFeeAt(callbackGasLimit, bufferedBaseFee)`.
 - Quote from the block header base fee plus a buffer, never with `quoteFee` through `eth_call`, because `eth_call` reports a base fee of 0 (see [Wallets and backends that pay through a consumer](#wallets-and-backends-that-pay-through-a-consumer)).
 - Send the transaction to your consumer contract; the coordinator rejects requests from wallets with `ContractConsumerRequired`.
+- The SDK does not wrap viem or other clients; its ABIs are plain JSON and work with any library.
+- To add Arc to a browser wallet, use `wallet_addEthereumChain` with the values from [Networks](#networks). The native currency uses 18 decimals:
+
+  ```js
+  await window.ethereum.request({
+    method: 'wallet_addEthereumChain',
+    params: [{
+      chainId: '0x13b2', // 5042, Arc Mainnet; Arc Testnet is '0x4cef52' (5042002)
+      chainName: 'Arc Mainnet',
+      nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+      rpcUrls: ['https://rpc.mainnet.arc.io'],
+      blockExplorerUrls: ['https://explorer.arc.io'],
+    }],
+  });
+  ```
+- Reverts from the coordinator are custom errors, and `coordinatorAbi` includes all of them. Decode revert data with `coordinator.interface.parseError(data)` in ethers, or add the coordinator ABI next to your consumer ABI so the wallet or library can name the error. The ones a consumer meets most often: `IncorrectFee(expected, actual)` (re-quote and resend), `InvalidCallbackGas`, `InvalidMapping` (from `RandomnessMapping`), `ContractConsumerRequired`, `UnknownRequest`, `NotFulfilled`, `RefundNotAvailable` (not yet past the deadline, already served or already refunded), `RequestRefunded` and `InsufficientCallbackGas` (raise the transaction gas limit; see [Gas for refund and retry calls](#gas-for-refund-and-retry-calls)). `OnlyCoordinator` comes from `D20VRFConsumer` and is only in your consumer's ABI.
+- ethers v6 returns structs as `Result` objects that are also arrays. A struct field named like an array method, such as `values`, `length` or `map`, is shadowed; read it by position or choose another field name.
 
 ## Request lifecycle
 
@@ -263,7 +280,7 @@ Timely service is onchain proof acceptance at or before `requestedAt + 60` secon
 
 ### Timing
 
-Each request's deadline is its block timestamp plus 60 seconds (`RESPONSE_TIMEOUT`). A proof accepted onchain at or before the deadline serves the request; after it the request can only be refunded. On Arc, a single request is normally fulfilled within a few seconds. In a stress test, 200 simultaneous requests were all delivered within 36 seconds, with a median of 19 seconds; an earlier Arc Testnet run on 2026-09-16 served 68 paid requests within 2–4 chain seconds, 47 of them in batched fulfillments. Measured timings are not an SLA: wait up to the deadline, as in [Reading results](#reading-results), and handle expiry.
+Each request's deadline is its block timestamp plus 60 seconds (`RESPONSE_TIMEOUT`). A proof accepted onchain at or before the deadline serves the request; after it the request can only be refunded. On Arc, a single request is normally fulfilled within a few seconds. In a stress test, 200 simultaneous requests were all delivered within 36 seconds, with a median of 19 seconds; an earlier Arc Testnet run on 2026-09-16 served 68 paid requests within 2–4 chain seconds, 47 of them in batched fulfillments. Measured timings are not an SLA: wait up to the deadline, as in [Reading results](#reading-results), and handle expiry. If the keeper does not publish the request's epoch packet or a proof in time, for any reason, the request simply expires: nothing is fulfilled late, and the fee can be refunded as described below. Your application only needs to treat the request as expired.
 
 ### Expiry and refunds
 
@@ -313,7 +330,7 @@ Trust model:
 - **Owner settings without an upgrade.** Coordinator: fee recipient, keeper share (0–100%), pricing within the bounds in [Pricing](#pricing), and the refund ratio for future requests (50–100%). Registry: committer and signer catalogs for epochs at least two ahead. Open requests keep their escrowed fee and refund ratio.
 - **Keeper.** The VRF key holder can withhold a proof but cannot substitute a different result for a request's fixed seed. A request that is not served within 60 seconds is refundable at its snapshotted ratio.
 
-D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers; `renounceOwnership` reverts on both, so upgrade authority can only move through an accepted transfer. The registry owner can change the committer and schedule future catalogs; the coordinator owner can change fee recipient, keeper share, bounded pricing and the refund ratio. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Verify the implementation history of BOTH proxies at the relevant receipts; stable proxy addresses alone do not identify executed code. Operators pin the proxy code, initialized configuration and both implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change.
+D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers; `renounceOwnership` reverts on both, so upgrade authority can only move through an accepted transfer. The registry owner can change the committer and schedule future catalogs; the coordinator owner can change fee recipient, keeper share, bounded pricing and the refund ratio. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Verify the implementation history of BOTH proxies at the relevant receipts; stable proxy addresses alone do not identify executed code. In practice, check it when you integrate and again whenever the deployment manifest records an upgrade or a proxy emits `Upgraded(implementation)`; a mismatch with the manifest means you should stop and review before sending more requests. Operators pin the proxy code, initialized configuration and both implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change.
 
 ## Use locally
 

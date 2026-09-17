@@ -1,11 +1,11 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "5cb939a27983e037bc4173dbaa2f021bd223dfbc",
+  "sourceCommit": "80c6b4b3451dd497399a8d91e3035585965d9ab9",
   "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
     "contracts/D20VRFConsumer.sol": "9200fcd8825756ba6978e42d94b52e82e6dea9b1ba35dc506652490194e16162",
-    "contracts/D20VRFCoordinator.sol": "f2c17545fe39323a39aef8a4e642965f5a607ba547365da0b542b5277be4dd2c",
+    "contracts/D20VRFCoordinator.sol": "a148fb05dd66a15282067eb5712f023347646c9046a43e1ac0c21b1d9d88d9a1",
     "contracts/examples/MiningRandomnessConsumer.sol": "2f5c19d05e66bea313fff65269650fe1e3bea70bd6aa80fa3e3de8bee8c24649",
     "contracts/interfaces/ID20VRF.sol": "0361aee07644cbf7c2bcde8ffd9188825d5be633c4a1520169a7702a38c1bdbc",
     "contracts/libraries/D20VRFRequests.sol": "f87e66f7eb0350d9b8740f120b97085957793b826b81a0c7c80d58a3fcd92b76",
@@ -20,7 +20,7 @@
     "src/sources.ts": "8e8b50adf76f4b17d3936ffa4bb4d13e3891f6c7c40483cc9854fc28d0e88a1d",
     "src/verification.ts": "754e39554c0c432cf1404741503f66b4199b84f39003d8e42f300a7256ffaa6a",
     "src/epoch.ts": "91bb0d818315dfb5841e1a0450c4b8839d6992ae7d573b33bda1f8797f071aa0",
-    "contracts/EpochEntropy.sol": "c2064f04924f27dedccd261b5ac77359569008c1a1013fb7e8f9f66908ee2c77",
+    "contracts/EpochEntropy.sol": "ece8798c2a608d20e1863debaab993a108266bd10b2f45bd762fab9f1db8243f",
     "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286",
     "contracts/libraries/DataTemplate.sol": "f0d93c2ec3bcb8cfb625001506fe24f938e6e2cfbae85632f2980d23595ed961",
     "src/templates.ts": "7f74968e746461e168a863769736399d74bdab29041ab8dd1cdc0d197b927e61"

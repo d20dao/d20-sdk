@@ -57,7 +57,8 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
     Catalog[] private catalogs;
     // Append-only recipe registry: an id is its index, and a registered recipe never changes.
     Recipe[] private registeredRecipes;
-    // Owner-approved wallets that may publish epochs besides the committer. The keeper share is still paid to committer.
+    // Owner-approved wallets that may publish epochs besides the committer, and that the coordinator pays the
+    // keeper share of the requests they serve themselves.
     mapping(address => bool) private backupCommitters;
     uint256 public backupCommitterCount;
     // Preserve all declared fields/mapping value layouts; consume reserved slots when extending.
@@ -101,8 +102,8 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         emit CommitterChanged(committer,next); committer=next;
     }
     /// @notice Allow or remove a backup committer: a separate keeper wallet that may publish epochs with exactly the
-    /// primary committer's rules, for example a follower keeper that takes over while the primary is down. It
-    /// earns nothing itself; the coordinator pays the keeper share to committer().
+    /// primary committer's rules, for example a follower keeper that takes over while the primary is down. It has no
+    /// other role; the coordinator pays it the keeper share of the requests whose accepted proofs it submits.
     function setBackupCommitter(address account, bool allowed) external onlyOwner {
         if(account==address(0)||(allowed&&account==committer)||backupCommitters[account]==allowed) revert InvalidConfig();
         if(allowed) {
@@ -115,6 +116,10 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         emit BackupCommitterSet(account,allowed);
     }
     function isBackupCommitter(address account) external view returns(bool) { return backupCommitters[account]; }
+    /// @notice Whether an account may publish epochs: the committer or an allowed backup committer. The coordinator
+    /// reads this to pay the keeper share to the wallet that submitted an accepted proof.
+    function isAuthorizedCommitter(address account) external view returns(bool) { return _authorized(account); }
+    function _authorized(address account) private view returns(bool) { return account==committer||backupCommitters[account]; }
     /// @notice Append an immutable recipe. It can never be edited or removed, so a changed listing becomes a new id.
     /// @param canonicalRequest AirnodeHub canonical request; its keccak256 is the query hash the signer signs.
     /// @param template DataTemplate of the exact signed data the recipe accepts.
@@ -273,7 +278,7 @@ contract EpochEntropy is Ownable2StepUpgradeable, UUPSUpgradeable {
         _commit(epochId,attempt,a);
     }
     function _commit(uint64 epochId, uint8 attempt, Attestation calldata a) private {
-        if(msg.sender!=committer&&!backupCommitters[msg.sender]) revert OnlyCommitter();
+        if(!_authorized(msg.sender)) revert OnlyCommitter();
         if(epochs[epochId].epochHash!=bytes32(0)) revert AlreadyCommitted();
         if(block.number<fallbackOpensAt(epochId,attempt)) revert FallbackNotOpen();
         (Selection memory s,bytes32 catalog)=_select(epochId,attempt);

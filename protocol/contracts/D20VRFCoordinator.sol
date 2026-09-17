@@ -9,7 +9,8 @@ import {VRF} from "./vendor/VRF.sol";
 import {ID20VRF, ID20VRFConsumer, ID20VRFRefundConsumer} from "./interfaces/ID20VRF.sol";
 import {RandomnessMapping} from "./libraries/RandomnessMapping.sol";
 
-/// @notice Single-operator secp256k1 VRF. Proof submission and callback retries are permissionless.
+/// @notice Single-operator secp256k1 VRF. Proof submission and callback retries are permissionless; the keeper share
+///         of a request goes to the submitter when the registry authorizes it to publish epochs, otherwise to committer().
 /// @dev Prototype: not audited or validated on Arc. Operational setters cannot replace a fixed result; the upgrade owner is trusted,
 ///      but the secret-key holder can withhold it. Expired requests refund; never reroll automatically.
 contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgradeable, UUPSUpgradeable {
@@ -416,8 +417,16 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
         r.proofHash = keccak256(abi.encode(proof));
         r.transcriptHash = _transcriptHash(requestId, r, anchor);
         r.fulfilled = true;
-        // Never pay the proof submitter: anyone may submit the fixed proof.
+        // Submission stays open to anyone. The keeper share goes to the submitter when the registry authorizes it to
+        // publish epochs (the committer or an allowed backup committer, such as a follower keeper), so each keeper
+        // earns what it serves; any other submitter's fulfillment pays committer(), as before. A registry without the
+        // view, or one whose call reverts, also pays committer(): the share is never skipped.
         address keeper = epochRegistry.committer();
+        if (msg.sender != keeper) {
+            try epochRegistry.isAuthorizedCommitter(msg.sender) returns (bool authorized) {
+                if (authorized) keeper = msg.sender;
+            } catch {}
+        }
         uint256 fee = r.feePaid;
         uint256 keeperAmount = fee / 10000 * keeperFeeBps + fee % 10000 * keeperFeeBps / 10000;
         earnedFees += fee - keeperAmount;

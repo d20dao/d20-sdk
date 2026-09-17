@@ -5,10 +5,10 @@
 Every function, event and error of `D20VRFCoordinator` and `EpochEntropy`, generated from the ABIs of `@d20dao/vrf-sdk` 0.4.0. Regenerate with `npm run build && npm run api-reference`; `npm test` fails when this file is out of date.
 
 - Package: `@d20dao/vrf-sdk` 0.4.0
-- Protocol source: commit `5cb939a27983e037bc4173dbaa2f021bd223dfbc`, copied to [`protocol/contracts/`](protocol/contracts/) (hashes in `PROTOCOL-PROVENANCE.json`)
+- Protocol source: commit `80c6b4b3451dd497399a8d91e3035585965d9ab9`, copied to [`protocol/contracts/`](protocol/contracts/) (hashes in `PROTOCOL-PROVENANCE.json`)
 - Compiler: solc 0.8.28+commit.7893614a.Emscripten.clang, EVM version `cancun`
 - `abi/D20VRFCoordinator.json` SHA-256: `4764ba62745e109f3b968b21ed23e88da739a4a26906fc2ed3192fa23b8d79c1`
-- `abi/EpochEntropy.json` SHA-256: `ed164c94e506a16c3a480bbe1c5a97fa1632535209d55a2a59d72ebe26774acf`
+- `abi/EpochEntropy.json` SHA-256: `684ee3dfe0745f141831aee896db6436d490d5e9715e61661c86b044d1c3260e`
 
 This reference describes that source. A deployment runs it only while the implementation behind each proxy is the one the deployment manifest records for that commit: check when you integrate and whenever a proxy emits `Upgraded` (README [Security and trust](README.md#security-and-trust)).
 
@@ -60,7 +60,7 @@ Requests, fulfillment, `storeBlockHash`, retries, `refundRequest` and withdrawal
 
 Returned by `getRequest`. It does not contain the escrowed fee or the refund ratio; read `requestFeePaid` and `requestRefundBps`.
 
-Source: `D20VRFCoordinator.sol` lines 58–76
+Source: `D20VRFCoordinator.sol` lines 59–77
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -124,7 +124,7 @@ Requests must come from a contract and pay at least the fee computed in their ow
 function quoteFee(uint32 callbackGasLimit) external view returns (uint256)
 ```
 
-Selector `0xc9caa0c3` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 227–232
+Selector `0xc9caa0c3` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 228–233
 
 Fee for a request with this `callbackGasLimit` priced at `block.basefee`, that is `quoteFeeAt(callbackGasLimit, block.basefee)`. Exact inside the requesting transaction, which is how `D20VRFRequests` helpers pay. Through `eth_call` the base fee is commonly reported as 0 (observed on Arc), so the answer collapses to `minFee` and a transaction sent with it reverts `IncorrectFee`. Off-chain, quote with `quoteFeeAt` and the latest header base fee plus a buffer, as `quoteRequestFee` does. It does not check the gas limit range.
 
@@ -136,7 +136,7 @@ Fee for a request with this `callbackGasLimit` priced at `block.basefee`, that i
 function quoteFeeAt(uint32 callbackGasLimit, uint256 baseFee) external view returns (uint256)
 ```
 
-Selector `0x26fa8481` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 219–226
+Selector `0x26fa8481` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 220–227
 
 `max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit))` over the live pricing for a base fee in wei that you supply; with `feeMultiplier` 0 it returns `minFee`. A quote, not a reservation: pricing can change before your transaction. A `baseFee` large enough to overflow uint256 reverts with `Panic(0x11)` instead of `FeeOverflow`.
 
@@ -148,7 +148,7 @@ Selector `0x26fa8481` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol
 function requestRandomness(bytes32 clientSeed, uint32 callbackGasLimit, address _refundAddress) external payable returns (uint256 requestId)
 ```
 
-Selector `0x9849d1e5` · Caller: Any contract · Source: `D20VRFCoordinator.sol` lines 234–239, 247–286
+Selector `0x9849d1e5` · Caller: Any contract · Source: `D20VRFCoordinator.sol` lines 235–240, 248–287
 
 Creates a raw request (spec all zero) with `msg.sender` as consumer and returns its ID. Needs `msg.value` at least the fee computed in this transaction; escrows exactly that fee and credits any excess to `_refundAddress` as refund credit. Fixes the request block, epoch, client seed, refund address, fee, refund ratio (`refundBps`) and a deadline of `block.timestamp + RESPONSE_TIMEOUT`. After acceptance the consumer receives `rawFulfillRandomness(requestId, randomness)` with exactly `callbackGasLimit` gas. Checks run in this order: caller has code, refund address non-zero, gas limit in range, fee, mapping, epoch started.
 
@@ -162,7 +162,7 @@ Creates a raw request (spec all zero) with `msg.sender` as consumer and returns 
 function requestMappedRandomness(bytes32 clientSeed, uint32 callbackGasLimit, address _refundAddress, RandomnessMapping.Spec spec) external payable returns (uint256 requestId)
 ```
 
-Selector `0xe6b41a8c` · Caller: Any contract · Source: `D20VRFCoordinator.sol` lines 241–245, 247–286
+Selector `0xe6b41a8c` · Caller: Any contract · Source: `D20VRFCoordinator.sol` lines 242–246, 248–287
 
 Same as `requestRandomness`, storing `spec` with the request (`getMapping`, `mappingHash`). The callback still carries the raw word; read the mapped values with `getMappedResult`. `D20VRFRequests` helpers call this function and pay `quoteFee` from the calling contract balance.
 
@@ -176,11 +176,11 @@ Views, callable by anyone. They describe requests created from now on; an existi
 
 | Function | Selector | Meaning | Source |
 | --- | --- | --- | --- |
-| <a id="coordinator-fn-pricing"></a>`pricing() returns (uint256, uint16, uint32)` | `0x7ce91411` | Live `(minFee, feeMultiplier, fulfillGasOverhead)`. The outputs are unnamed, so read them by position. | lines 210–212 |
-| <a id="coordinator-fn-minfee"></a>`minFee() returns (uint256)` | `0x24ec7590` | Minimum fee in wei, at most `MAX_MIN_FEE` (10 USDC). | line 43 |
-| <a id="coordinator-fn-feemultiplier"></a>`feeMultiplier() returns (uint16)` | `0xe5a70ef7` | Base-fee multiplier, 0 to `MAX_FEE_MULTIPLIER` (20); 0 makes every fee `minFee`. | lines 45–46 |
-| <a id="coordinator-fn-fulfillgasoverhead"></a>`fulfillGasOverhead() returns (uint32)` | `0x19d40839` | Gas added to `callbackGasLimit` in the fee formula, `MIN_FULFILL_GAS_OVERHEAD` to `MAX_FULFILL_GAS_OVERHEAD`. | line 47 |
-| <a id="coordinator-fn-refundbps"></a>`refundBps() returns (uint16)` | `0xec8c9a0b` | Current refund ratio in basis points (5000 to 10000), copied into each new request. Not the ratio of an existing request: use `requestRefundBps(requestId)`. | lines 48–49 |
+| <a id="coordinator-fn-pricing"></a>`pricing() returns (uint256, uint16, uint32)` | `0x7ce91411` | Live `(minFee, feeMultiplier, fulfillGasOverhead)`. The outputs are unnamed, so read them by position. | lines 211–213 |
+| <a id="coordinator-fn-minfee"></a>`minFee() returns (uint256)` | `0x24ec7590` | Minimum fee in wei, at most `MAX_MIN_FEE` (10 USDC). | line 44 |
+| <a id="coordinator-fn-feemultiplier"></a>`feeMultiplier() returns (uint16)` | `0xe5a70ef7` | Base-fee multiplier, 0 to `MAX_FEE_MULTIPLIER` (20); 0 makes every fee `minFee`. | lines 46–47 |
+| <a id="coordinator-fn-fulfillgasoverhead"></a>`fulfillGasOverhead() returns (uint32)` | `0x19d40839` | Gas added to `callbackGasLimit` in the fee formula, `MIN_FULFILL_GAS_OVERHEAD` to `MAX_FULFILL_GAS_OVERHEAD`. | line 48 |
+| <a id="coordinator-fn-refundbps"></a>`refundBps() returns (uint16)` | `0xec8c9a0b` | Current refund ratio in basis points (5000 to 10000), copied into each new request. Not the ratio of an existing request: use `requestRefundBps(requestId)`. | lines 49–50 |
 
 ### <a id="coordinator-reading-request-state-and-results"></a>Reading request state and results
 
@@ -192,7 +192,7 @@ Views, callable by anyone, including from a callback. Request IDs start at 1 and
 function getRequest(uint256 requestId) external view returns (D20VRFCoordinator.Request result)
 ```
 
-Selector `0xc58343ef` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 288–307, 547–552
+Selector `0xc58343ef` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 289–308, 556–561
 
 Full state of a request, see [`D20VRFCoordinator.Request`](#coordinator-type-d20vrfcoordinator-request). `targetBlock` and `epochHash` are resolved from the registry, so they become non-zero as soon as the epoch packet is published. `fulfilled` means the word is final; `delivered` only reports that a callback succeeded. A request that is not `fulfilled` in a block whose timestamp is after `deadline` has expired and can only be refunded. When polling, read the latest block before `getRequest`, so that a proof included up to that block is visible.
 
@@ -204,7 +204,7 @@ Full state of a request, see [`D20VRFCoordinator.Request`](#coordinator-type-d20
 function getMapping(uint256 requestId) external view returns (RandomnessMapping.Spec)
 ```
 
-Selector `0xede9ba8b` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 339–342
+Selector `0xede9ba8b` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 340–343
 
 The stored [`RandomnessMapping.Spec`](#coordinator-type-randomnessmapping-spec); all fields zero (Raw) for `requestRandomness`.
 
@@ -216,7 +216,7 @@ The stored [`RandomnessMapping.Spec`](#coordinator-type-randomnessmapping-spec);
 function getMappedResult(uint256 requestId) external view returns (uint256[])
 ```
 
-Selector `0x8f09a3e6` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 344–348
+Selector `0x8f09a3e6` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 345–349
 
 The accepted word mapped with the stored spec: `[uint256(word)]` for a raw request, otherwise the values in README [Randomness options](README.md#randomness-options). Part of `ID20VRF`. Reverts `NotFulfilled` until a proof is accepted, so an expired or refunded request never has a result. Gas grows with the mapping; a 256-item shuffle is expensive onchain.
 
@@ -228,7 +228,7 @@ The accepted word mapped with the stored spec: `[uint256(word)]` for a raw reque
 function mapRandomness(bytes32 randomness, RandomnessMapping.Spec spec) external pure returns (uint256[])
 ```
 
-Selector `0x41c2a199` · Caller: Anyone (pure) · Source: `D20VRFCoordinator.sol` lines 350–355
+Selector `0x41c2a199` · Caller: Anyone (pure) · Source: `D20VRFCoordinator.sol` lines 351–356
 
 Maps any word with any valid spec, like the SDK `mapRandomness(word, spec)` off-chain. It does not show that a request was fulfilled.
 
@@ -240,7 +240,7 @@ Maps any word with any valid spec, like the SDK `mapRandomness(word, spec)` off-
 function requestFeePaid(uint256 requestId) external view returns (uint256)
 ```
 
-Selector `0xef7cc992` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 330–333
+Selector `0xef7cc992` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 331–334
 
 Fee escrowed by the request (`feePaid` in `RandomnessRequested`), excluding any overpayment. The keeper share, the protocol share and the refund are computed from it.
 
@@ -252,7 +252,7 @@ Fee escrowed by the request (`feePaid` in `RandomnessRequested`), excluding any 
 function requestRefundBps(uint256 requestId) external view returns (uint16)
 ```
 
-Selector `0x5d170fd7` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 334–337
+Selector `0x5d170fd7` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 335–338
 
 Refund ratio the request copied from `refundBps` at creation. An expiry refund pays `requestFeePaid × requestRefundBps / 10000`; a later `setRefundBps` does not change it.
 
@@ -264,7 +264,7 @@ Refund ratio the request copied from `refundBps` at creation. An expiry refund p
 function refundCallbackDelivered(uint256) external view returns (bool)
 ```
 
-Selector `0x281d3157` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 102, 500
+Selector `0x281d3157` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 103, 509
 
 True once an `onRefund` notification for the request succeeded, at `refundRequest` or `retryRefundCallback`. Returns false for unknown IDs instead of reverting.
 
@@ -274,7 +274,7 @@ True once an `onRefund` notification for the request succeeded, at `refundReques
 function nextRequestId() external view returns (uint256)
 ```
 
-Selector `0x6a84a985` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 50, 172, 260
+Selector `0x6a84a985` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 51, 173, 261
 
 ID the next request will receive. Issued IDs are 1 to `nextRequestId() - 1`.
 
@@ -288,7 +288,7 @@ Recovery calls need no value or role. They forward gas to the consumer and rever
 function refundRequest(uint256 requestId) external
 ```
 
-Selector `0x7411484e` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 455–479, 491–502
+Selector `0x7411484e` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 464–488, 500–511
 
 Refunds an unfulfilled request once a block timestamp is after its deadline. Marks it refunded, sends `feePaid × requestRefundBps / 10000` to the fixed refund address with a 30,000-gas transfer, or adds it to that address's refund credit if the transfer fails, and adds the rest of the fee to `earnedFees`. Then calls `onRefund(requestId)` on the consumer with 100,000 gas; a failed notification does not undo the refund. The caller receives nothing. Measured minimum transaction gas limit 302,558 to 357,517; use 400,000.
 
@@ -302,7 +302,7 @@ Refunds an unfulfilled request once a block timestamp is after its deadline. Mar
 function retryCallback(uint256 requestId, uint32 gasLimit) external
 ```
 
-Selector `0xdd11c275` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 445–453, 602–619
+Selector `0xdd11c275` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 454–462, 611–628
 
 Calls `rawFulfillRandomness` again with the same accepted word after a failed callback, forwarding `gasLimit` (30,000 to 1,000,000 and not below the request's `callbackGasLimit`). Sets `delivered` on success. Pays nobody and never changes the word. Transaction gas limit: about `gasLimit + 250,000`.
 
@@ -316,7 +316,7 @@ Calls `rawFulfillRandomness` again with the same accepted word after a failed ca
 function retryRefundCallback(uint256 requestId, uint32 gasLimit) external
 ```
 
-Selector `0x054f6962` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 481–489, 491–502
+Selector `0x054f6962` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 490–498, 500–511
 
 Repeats a failed `onRefund` notification for a refunded request with `gasLimit` (100,000 to 1,000,000). Never transfers funds again. Transaction gas limit: about `gasLimit + 150,000`.
 
@@ -330,7 +330,7 @@ Repeats a failed `onRefund` notification for a refunded request with `gasLimit` 
 function withdrawRefundCredit(address recipient) external
 ```
 
-Selector `0x445071f2` · Caller: Refund-credit holder · Source: `D20VRFCoordinator.sol` lines 504–514
+Selector `0x445071f2` · Caller: Refund-credit holder · Source: `D20VRFCoordinator.sol` lines 513–523
 
 Sends all of the caller's refund credit, `refundCredits(msg.sender)`, to `recipient` with all remaining gas. Credit comes from overpayment and from refund transfers that failed, and belongs to the request's refund address, so that address must make the call. If `recipient` rejects the transfer the call reverts and the credit stays.
 
@@ -344,7 +344,7 @@ Sends all of the caller's refund credit, `refundCredits(msg.sender)`, to `recipi
 function withdrawFees(address recipient) external
 ```
 
-Selector `0x164e68de` · Caller: Fee recipient · Source: `D20VRFCoordinator.sol` lines 516–525
+Selector `0x164e68de` · Caller: Fee recipient · Source: `D20VRFCoordinator.sol` lines 525–534
 
 Sends all `earnedFees` to `recipient`. Fees accrue at acceptance (fee minus keeper share) and from the part of a refunded fee that is not returned; open escrow is never included. With nothing earned it sends zero without reverting.
 
@@ -358,7 +358,7 @@ Sends all `earnedFees` to `recipient`. Fees accrue at acceptance (fee minus keep
 function withdrawKeeperCredit(address recipient) external
 ```
 
-Selector `0xf62c546b` · Caller: Keeper-credit holder · Source: `D20VRFCoordinator.sol` lines 527–536
+Selector `0xf62c546b` · Caller: Keeper-credit holder · Source: `D20VRFCoordinator.sol` lines 536–545
 
 Sends all of the caller's keeper credit (keeper-share transfers that failed) to `recipient`.
 
@@ -372,17 +372,17 @@ Views, callable by anyone. Amounts are in wei of native USDC.
 
 | Function | Selector | Meaning | Source |
 | --- | --- | --- | --- |
-| <a id="coordinator-fn-refundcredits"></a>`refundCredits(address) returns (uint256)` | `0x61137e40` | Refund credit that an address can withdraw with `withdrawRefundCredit`. | line 56 |
-| <a id="coordinator-fn-totalrefundcredits"></a>`totalRefundCredits() returns (uint256)` | `0x6e0842e1` | Sum of all refund credit held by the coordinator. | line 55 |
-| <a id="coordinator-fn-earnedfees"></a>`earnedFees() returns (uint256)` | `0xb1b3ffd9` | Protocol fees that the fee recipient can withdraw. | line 51 |
-| <a id="coordinator-fn-feerecipient"></a>`feeRecipient() returns (address)` | `0x46904840` | Address allowed to call `withdrawFees`; changed with `setFeeRecipient`. | line 39 |
-| <a id="coordinator-fn-keeperfeebps"></a>`keeperFeeBps() returns (uint16)` | `0x0eab7d63` | Keeper share of each accepted fee in basis points (0 to 10000). Read at acceptance, not snapshotted: a change applies to open requests accepted afterwards. It only splits the escrowed fee; what the consumer paid and can be refunded does not change. | lines 40, 422 |
-| <a id="coordinator-fn-keepercredits"></a>`keeperCredits(address) returns (uint256)` | `0xf5c764f6` | Keeper credit that an address can withdraw with `withdrawKeeperCredit`. | line 41 |
-| <a id="coordinator-fn-totalkeepercredits"></a>`totalKeeperCredits() returns (uint256)` | `0xc7281b7a` | Sum of all keeper credit held by the coordinator. | line 42 |
+| <a id="coordinator-fn-refundcredits"></a>`refundCredits(address) returns (uint256)` | `0x61137e40` | Refund credit that an address can withdraw with `withdrawRefundCredit`. | line 57 |
+| <a id="coordinator-fn-totalrefundcredits"></a>`totalRefundCredits() returns (uint256)` | `0x6e0842e1` | Sum of all refund credit held by the coordinator. | line 56 |
+| <a id="coordinator-fn-earnedfees"></a>`earnedFees() returns (uint256)` | `0xb1b3ffd9` | Protocol fees that the fee recipient can withdraw. | line 52 |
+| <a id="coordinator-fn-feerecipient"></a>`feeRecipient() returns (address)` | `0x46904840` | Address allowed to call `withdrawFees`; changed with `setFeeRecipient`. | line 40 |
+| <a id="coordinator-fn-keeperfeebps"></a>`keeperFeeBps() returns (uint16)` | `0x0eab7d63` | Keeper share of each accepted fee in basis points (0 to 10000). Read at acceptance, not snapshotted: a change applies to open requests accepted afterwards. It only splits the escrowed fee; what the consumer paid and can be refunded does not change. | lines 41, 431 |
+| <a id="coordinator-fn-keepercredits"></a>`keeperCredits(address) returns (uint256)` | `0xf5c764f6` | Keeper credit that an address can withdraw with `withdrawKeeperCredit`. | line 42 |
+| <a id="coordinator-fn-totalkeepercredits"></a>`totalKeeperCredits() returns (uint256)` | `0xc7281b7a` | Sum of all keeper credit held by the coordinator. | line 43 |
 
 ### <a id="coordinator-keeper-and-proof-functions"></a>Keeper and proof functions
 
-Proof submission is permissionless: anyone holding a valid proof may submit it, and the keeper share always goes to the registry `committer()`. Consumers normally only read `getRequest`. Besides the custom errors listed, proof functions can revert with `Error(string)` messages from the vendored VRF verifier, such as `invalid proof`, which are not in the ABI.
+Proof submission is permissionless: anyone holding a valid proof may submit it, and the keeper share goes to the submitting wallet when the registry authorizes it as its committer or a backup committer, and to `committer()` otherwise. Consumers normally only read `getRequest`. Besides the custom errors listed, proof functions can revert with `Error(string)` messages from the vendored VRF verifier, such as `invalid proof`, which are not in the ABI.
 
 #### <a id="coordinator-fn-fulfillrandomness"></a>`fulfillRandomness`
 
@@ -390,7 +390,7 @@ Proof submission is permissionless: anyone holding a valid proof may submit it, 
 function fulfillRandomness(uint256 requestId, VRF.Proof proof) external
 ```
 
-Selector `0xef7c2b19` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 388–396, 412–437
+Selector `0xef7c2b19` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 389–397, 413–446
 
 Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) to `committer()` with 30,000 gas, or records it as keeper credit. A failing callback does not revert the fulfillment.
 
@@ -404,7 +404,7 @@ Accepts a proof for a request that is not fulfilled, not refunded and not past i
 function fulfillRandomnessBatch(uint256[] ids, VRF.Proof[] proofs) external
 ```
 
-Selector `0x9497b180` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 398–410
+Selector `0x9497b180` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 399–411
 
 Fulfills up to `MAX_FULFILL_BATCH` (16) requests, one proof each. Members already fulfilled, refunded or past their deadline, including an ID repeated in the batch, are skipped with `FulfillmentSkipped`; every other member runs exactly like `fulfillRandomness` and emits the same events, so an unknown ID, an unready member or an invalid proof reverts the whole batch.
 
@@ -418,7 +418,7 @@ Fulfills up to `MAX_FULFILL_BATCH` (16) requests, one proof each. Members alread
 function storeBlockHash(uint256 requestId) external returns (bytes32)
 ```
 
-Selector `0x262fd733` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 367–371, 553–568
+Selector `0x262fd733` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 368–372, 562–577
 
 Resolves the target block from the published epoch, stores its hash if not stored yet and returns it. Fulfillment does this automatically; calling it earlier keeps a request provable after its target leaves the 256-block `BLOCKHASH` window. Needs `block.number` at least `targetBlock + confirmationBlocks`. Works on any request, whatever its status.
 
@@ -432,7 +432,7 @@ Resolves the target block from the published epoch, stores its hash if not store
 function verifyRequestProof(uint256 requestId, VRF.Proof proof) external view returns (bytes32)
 ```
 
-Selector `0x0846de99` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 357–365
+Selector `0x0846de99` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 358–366
 
 Returns the word a proof yields for the request's seed, without changing state. A valid proof is not acceptance: check `getRequest(requestId).fulfilled`.
 
@@ -444,7 +444,7 @@ Returns the word a proof yields for the request's seed, without changing state. 
 function requestSeed(uint256 requestId) external view returns (uint256)
 ```
 
-Selector `0xa9df851a` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 373–378, 570–578
+Selector `0xa9df851a` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 374–379, 579–587
 
 Seed the proof must use: `keccak256(abi.encode(SEED_DOMAIN, chainId, coordinator, keyHash, requestId, consumer, clientSeed, mappingHash, requestBlock, targetBlock, blockHash, epochId, epochHash))` as uint256. Available only after publication and `confirmationBlocks` confirmations of the target block.
 
@@ -456,7 +456,7 @@ Seed the proof must use: `keccak256(abi.encode(SEED_DOMAIN, chainId, coordinator
 function getProofContext(uint256 requestId) external view returns (uint256 seed, uint64 deadline, bool fulfilled, bool refunded)
 ```
 
-Selector `0xcf14de9d` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 380–386
+Selector `0xcf14de9d` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 381–387
 
 `requestSeed` together with `deadline`, `fulfilled` and `refunded`. It reverts `NotReady` like `requestSeed`, so it is not a status read for waiting requests; use `getRequest`.
 
@@ -468,7 +468,7 @@ Selector `0xcf14de9d` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol
 function getPendingRequestIds(uint256 fromId, uint256 limit) external view returns (uint256[] ids, uint256 nextCursor)
 ```
 
-Selector `0xfdfe72e6` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 309–328
+Selector `0xfdfe72e6` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 310–329
 
 Scans `limit` (1 to 256) request IDs from `fromId` (at least 1) and returns those not fulfilled, not refunded and not past their deadline, with the ID to continue from. Continue with `nextCursor` until it equals `nextRequestId()`. The answer can be stale by the time a transaction lands.
 
@@ -480,17 +480,17 @@ Views, callable by anyone. Nothing here has a setter except through an upgrade.
 
 | Function | Selector | Meaning | Source |
 | --- | --- | --- | --- |
-| <a id="coordinator-fn-lastservedrequestid"></a>`lastServedRequestId() returns (uint256)` | `0xef54e226` | ID of the most recently accepted request; 0 before the first. | lines 52, 424 |
-| <a id="coordinator-fn-lastservedindex"></a>`lastServedIndex() returns (uint256)` | `0x7e176eed` | Number of accepted requests so far: the `serveIndex` of the latest `RequestServed`. | lines 53, 425 |
-| <a id="coordinator-fn-servedrequestat"></a>`servedRequestAt(uint256) returns (uint256)` | `0xf9a4acc6` | Request ID accepted at a serve index (from 1); 0 for an index not used yet. | lines 54, 425 |
-| <a id="coordinator-fn-keyhash"></a>`keyHash() returns (bytes32)` | `0x61728f39` | `keccak256(abi.encode(publicKey))` of the VRF key; indexed in `RandomnessRequested` and `ProofVerified`. | lines 36, 179 |
-| <a id="coordinator-fn-publickeyx"></a>`publicKeyX() returns (uint256)` | `0xfa6df55d` | x coordinate of the VRF public key. | line 34 |
-| <a id="coordinator-fn-publickeyy"></a>`publicKeyY() returns (uint256)` | `0xd7a6f6e8` | y coordinate of the VRF public key. | line 35 |
-| <a id="coordinator-fn-confirmationblocks"></a>`confirmationBlocks() returns (uint16)` | `0x460a58aa` | Blocks after the target block before the seed and proofs become available (1 to 64, set at initialization). | lines 44, 555 |
-| <a id="coordinator-fn-epochregistry"></a>`epochRegistry() returns (address)` | `0x2b12cb69` | The `EpochEntropy` proxy that supplies epochs and the keeper-share recipient. | line 32 |
-| <a id="coordinator-fn-protocolconfigurationhash"></a>`protocolConfigurationHash() returns (bytes32)` | `0x155cf49b` | Hash of the initialized configuration (public key, initial fee recipient, initial minimum fee, confirmations, registry, initial catalog hash, first epoch start, epoch length 200) under `CONFIG_DOMAIN`. Bound into every transcript hash. | lines 31, 189 |
-| <a id="coordinator-fn-initialfeerecipient"></a>`initialFeeRecipient() returns (address)` | `0x308c2d6b` | Fee recipient given to `initialize`, used by replay. The live payout address is `feeRecipient()`. | lines 38, 181 |
-| <a id="coordinator-fn-initialminfee"></a>`initialMinFee() returns (uint256)` | `0xb3839295` | Minimum fee given to `initialize`, used by replay. The live minimum is `minFee()`. | lines 104, 184 |
+| <a id="coordinator-fn-lastservedrequestid"></a>`lastServedRequestId() returns (uint256)` | `0xef54e226` | ID of the most recently accepted request; 0 before the first. | lines 53, 433 |
+| <a id="coordinator-fn-lastservedindex"></a>`lastServedIndex() returns (uint256)` | `0x7e176eed` | Number of accepted requests so far: the `serveIndex` of the latest `RequestServed`. | lines 54, 434 |
+| <a id="coordinator-fn-servedrequestat"></a>`servedRequestAt(uint256) returns (uint256)` | `0xf9a4acc6` | Request ID accepted at a serve index (from 1); 0 for an index not used yet. | lines 55, 434 |
+| <a id="coordinator-fn-keyhash"></a>`keyHash() returns (bytes32)` | `0x61728f39` | `keccak256(abi.encode(publicKey))` of the VRF key; indexed in `RandomnessRequested` and `ProofVerified`. | lines 37, 180 |
+| <a id="coordinator-fn-publickeyx"></a>`publicKeyX() returns (uint256)` | `0xfa6df55d` | x coordinate of the VRF public key. | line 35 |
+| <a id="coordinator-fn-publickeyy"></a>`publicKeyY() returns (uint256)` | `0xd7a6f6e8` | y coordinate of the VRF public key. | line 36 |
+| <a id="coordinator-fn-confirmationblocks"></a>`confirmationBlocks() returns (uint16)` | `0x460a58aa` | Blocks after the target block before the seed and proofs become available (1 to 64, set at initialization). | lines 45, 564 |
+| <a id="coordinator-fn-epochregistry"></a>`epochRegistry() returns (address)` | `0x2b12cb69` | The `EpochEntropy` proxy that supplies epochs and the keeper-share recipient. | line 33 |
+| <a id="coordinator-fn-protocolconfigurationhash"></a>`protocolConfigurationHash() returns (bytes32)` | `0x155cf49b` | Hash of the initialized configuration (public key, initial fee recipient, initial minimum fee, confirmations, registry, initial catalog hash, first epoch start, epoch length 200) under `CONFIG_DOMAIN`. Bound into every transcript hash. | lines 32, 190 |
+| <a id="coordinator-fn-initialfeerecipient"></a>`initialFeeRecipient() returns (address)` | `0x308c2d6b` | Fee recipient given to `initialize`, used by replay. The live payout address is `feeRecipient()`. | lines 39, 182 |
+| <a id="coordinator-fn-initialminfee"></a>`initialMinFee() returns (uint256)` | `0xb3839295` | Minimum fee given to `initialize`, used by replay. The live minimum is `minFee()`. | lines 105, 185 |
 
 ### <a id="coordinator-owner-administration"></a>Owner administration
 
@@ -502,7 +502,7 @@ Owner-only functions revert `OwnableUnauthorizedAccount` for anyone else. No set
 function setPricing(uint256 nextMinFee, uint16 multiplier, uint32 overhead) external
 ```
 
-Selector `0x4c729ce6` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 204–209
+Selector `0x4c729ce6` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 205–210
 
 Sets `minFee` (at most `MAX_MIN_FEE`, 10 USDC), `feeMultiplier` (at most `MAX_FEE_MULTIPLIER`, 20) and `fulfillGasOverhead` (`MIN_FULFILL_GAS_OVERHEAD` to `MAX_FULFILL_GAS_OVERHEAD`, 100,000 to 2,000,000 gas). Affects requests created afterwards; open requests keep their escrowed fee.
 
@@ -516,7 +516,7 @@ Sets `minFee` (at most `MAX_MIN_FEE`, 10 USDC), `feeMultiplier` (at most `MAX_FE
 function setRefundBps(uint16 next) external
 ```
 
-Selector `0x55a94d1b` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 213–217
+Selector `0x55a94d1b` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 214–218
 
 Sets the refund ratio for requests created afterwards, `MIN_REFUND_BPS` (5000) to 10000.
 
@@ -530,7 +530,7 @@ Sets the refund ratio for requests created afterwards, `MIN_REFUND_BPS` (5000) t
 function setKeeperFeeBps(uint16 next) external
 ```
 
-Selector `0xe140f0ca` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 200–203
+Selector `0xe140f0ca` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 201–204
 
 Sets the keeper share, 0 to 10000 basis points. Read at each acceptance, so it also applies to open requests accepted later.
 
@@ -544,7 +544,7 @@ Sets the keeper share, 0 to 10000 basis points. Read at each acceptance, so it a
 function setFeeRecipient(address next) external
 ```
 
-Selector `0xe74b981b` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 196–199
+Selector `0xe74b981b` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 197–200
 
 Sets the address allowed to withdraw `earnedFees`, including fees earned before the change. The zero address is rejected.
 
@@ -606,7 +606,7 @@ Completes the transfer to the caller and clears the nomination.
 function renounceOwnership() external view
 ```
 
-Selector `0x715018a6` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 193–194
+Selector `0x715018a6` · Caller: Owner · Source: `D20VRFCoordinator.sol` lines 194–195
 
 Disabled and declared `view`: the owner gets `RenounceDisabled` and anyone else `OwnableUnauthorizedAccount`, so the contract always has an owner and upgrade authority can only move through an accepted transfer.
 
@@ -644,7 +644,7 @@ ERC-1822 check used by `upgradeToAndCall`. Returns the ERC-1967 implementation s
 function initialize(uint256[2] publicKey, address initialOwner, address recipient, uint256 fee, uint16 confirmations, address registry, uint16 keeperBps) external
 ```
 
-Selector `0x56b95b47` · Caller: Once, by `D20Proxy` at deployment · Source: `D20VRFCoordinator.sol` lines 169–190
+Selector `0x56b95b47` · Caller: Once, by `D20Proxy` at deployment · Source: `D20VRFCoordinator.sol` lines 170–191
 
 Sets owner, VRF public key, fee recipient, minimum fee, confirmations, registry and keeper share, with `feeMultiplier` 5, `fulfillGasOverhead` 300,000 and `refundBps` 10000. A public key that is not on the curve can also revert with an `Error(string)` from the verifier.
 
@@ -684,7 +684,7 @@ Views returning values fixed in the implementation code.
 event RandomnessRequested(uint256 indexed requestId, address indexed consumer, bytes32 indexed keyHash, bytes32 clientSeed, uint64 requestBlock, uint32 callbackGasLimit, uint256 feePaid, address refundAddress, uint64 deadline)
 ```
 
-Topic 0 `0xaf91b17376114a36689aa115062983bda7b43263a891fb8de0cc69d30d4240ad` · Emitted by: [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness) · Source: `D20VRFCoordinator.sol` lines 138–142, 283–284
+Topic 0 `0xaf91b17376114a36689aa115062983bda7b43263a891fb8de0cc69d30d4240ad` · Emitted by: [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness) · Source: `D20VRFCoordinator.sol` lines 139–143, 284–285
 
 A request was created. `feePaid` is the escrowed fee, not `msg.value`; `deadline` is the block timestamp plus 60 seconds. Read `requestId` from this log in the request receipt, filtering by the coordinator address and event name: with an overpayment, `FeeOverpaymentCredited` comes first.
 
@@ -694,7 +694,7 @@ A request was created. `feePaid` is the escrowed fee, not `msg.value`; `deadline
 event MappingRequested(uint256 indexed requestId, bytes32 indexed mappingHash, RandomnessMapping.Spec spec)
 ```
 
-Topic 0 `0xbe1c93f40bd74ff9acd22dc40818e36d04e0b8a49b8238d0537c63219c2336dd` · Emitted by: [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness) · Source: `D20VRFCoordinator.sol` lines 157, 285
+Topic 0 `0xbe1c93f40bd74ff9acd22dc40818e36d04e0b8a49b8238d0537c63219c2336dd` · Emitted by: [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness) · Source: `D20VRFCoordinator.sol` lines 158, 286
 
 Emitted right after `RandomnessRequested` with the stored spec (all zero for a raw request) and its hash.
 
@@ -704,7 +704,7 @@ Emitted right after `RandomnessRequested` with the stored spec (all zero for a r
 event FeeOverpaymentCredited(uint256 indexed requestId, address indexed refundAddress, uint256 amount)
 ```
 
-Topic 0 `0x8ae693db98f043f48e8f427375449ed5576aba97575e4f7f93ff2c1f6c75dcb5` · Emitted by: [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness) · Source: `D20VRFCoordinator.sol` lines 151, 277–282
+Topic 0 `0x8ae693db98f043f48e8f427375449ed5576aba97575e4f7f93ff2c1f6c75dcb5` · Emitted by: [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness) · Source: `D20VRFCoordinator.sol` lines 152, 278–283
 
 `msg.value` exceeded the fee and `amount` was added to `refundCredits(refundAddress)`, independently of what happens to the request. Emitted before `RandomnessRequested`.
 
@@ -714,7 +714,7 @@ Topic 0 `0x8ae693db98f043f48e8f427375449ed5576aba97575e4f7f93ff2c1f6c75dcb5` · 
 event BlockHashStored(uint256 indexed requestId, uint64 targetBlock, bytes32 blockHash)
 ```
 
-Topic 0 `0x81bc3b4ec75af0fb9ed3521d7c766d8f995d04b0735c17d61ff9d468b0f04911` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash) · Source: `D20VRFCoordinator.sol` lines 143, 561–568
+Topic 0 `0x81bc3b4ec75af0fb9ed3521d7c766d8f995d04b0735c17d61ff9d468b0f04911` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash) · Source: `D20VRFCoordinator.sol` lines 144, 570–577
 
 The target block hash of the request was stored. Emitted once per request: by `storeBlockHash`, or by fulfillment if the hash was not stored before.
 
@@ -724,7 +724,7 @@ The target block hash of the request was stored. Emitted once per request: by `s
 event RequestServed(uint256 indexed requestId, uint256 indexed serveIndex)
 ```
 
-Topic 0 `0x2012511e6cebd578bcabff1ef3346edb032cbab8622e9f23d9f15d7d1037267f` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 159, 424–426
+Topic 0 `0x2012511e6cebd578bcabff1ef3346edb032cbab8622e9f23d9f15d7d1037267f` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 160, 433–435
 
 A proof was accepted. `serveIndex` counts accepted requests from 1 (`lastServedIndex`, `servedRequestAt`).
 
@@ -734,7 +734,7 @@ A proof was accepted. `serveIndex` counts accepted requests from 1 (`lastServedI
 event ProofVerified(uint256 indexed requestId, bytes32 indexed keyHash, uint256 seed, bytes32 proofHash)
 ```
 
-Topic 0 `0x55bb25be3ecd9f68ceae7cdabf4eabe2e0940bd8fc1c26c0d68ad5f7c5d08d22` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 158, 427
+Topic 0 `0x55bb25be3ecd9f68ceae7cdabf4eabe2e0940bd8fc1c26c0d68ad5f7c5d08d22` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 159, 436
 
 Seed and hash of the accepted proof.
 
@@ -744,7 +744,7 @@ Seed and hash of the accepted proof.
 event RandomnessFulfilled(uint256 indexed requestId, bytes32 randomness, address indexed submitter)
 ```
 
-Topic 0 `0x9c82683ee7932041c254d206bcce4241d66a811d53ee7191799cc120777b2b87` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 144, 428
+Topic 0 `0x9c82683ee7932041c254d206bcce4241d66a811d53ee7191799cc120777b2b87` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 145, 437
 
 A proof was accepted and `randomness` is final. `submitter` sent the transaction and is not paid for it.
 
@@ -754,7 +754,7 @@ A proof was accepted and `randomness` is final. `submitter` sent the transaction
 event FulfillmentEvidence(uint256 indexed requestId, bytes32 indexed transcriptHash, bytes packet)
 ```
 
-Topic 0 `0xa121bbea897439460dfb08c3e6d6af064bc1f31e9477471828a87c5596b92e77` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 162–163, 439–443
+Topic 0 `0xa121bbea897439460dfb08c3e6d6af064bc1f31e9477471828a87c5596b92e77` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 163–164, 448–452
 
 The accepted proof as a 416-byte ABI-encoded packet, indexed by `transcriptHash`. Decode it with `decodeEvidencePacket`; take evidence from this log, not from calldata, since a batch carries several proofs.
 
@@ -764,7 +764,7 @@ The accepted proof as a 416-byte ABI-encoded packet, indexed by `transcriptHash`
 event CallbackAttempted(uint256 indexed requestId, bool success, uint32 gasLimit)
 ```
 
-Topic 0 `0x70f64c0739e827900ae6f2e1317601653f4080bc857f423671fc58d5822f1f4a` · Emitted by: [`retryCallback`](#coordinator-fn-retrycallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 145, 602–619
+Topic 0 `0x70f64c0739e827900ae6f2e1317601653f4080bc857f423671fc58d5822f1f4a` · Emitted by: [`retryCallback`](#coordinator-fn-retrycallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 146, 611–628
 
 Result of calling `rawFulfillRandomness` with `gasLimit` gas, at fulfillment and at each `retryCallback`. `success` false means the consumer reverted, ran out of gas or has no code; the word is accepted either way.
 
@@ -774,9 +774,9 @@ Result of calling `rawFulfillRandomness` with `gasLimit` gas, at fulfillment and
 event KeeperFeePaid(uint256 indexed requestId, address indexed keeper, uint256 amount, bool paid)
 ```
 
-Topic 0 `0x7605929b04963e0365f647d9ab12e7ac4aeba5474bb80f1e1554fccad0584683` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 152, 431–436
+Topic 0 `0x7605929b04963e0365f647d9ab12e7ac4aeba5474bb80f1e1554fccad0584683` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 153, 440–445
 
-At acceptance, when the keeper share is non-zero: `amount` went to `keeper`, the registry committer, by a 30,000-gas transfer (`paid` true) or was added to `keeperCredits(keeper)` (`paid` false). Emitted after `CallbackAttempted`.
+At acceptance, when the keeper share is non-zero: `amount` went to `keeper`, the submitter when the registry authorizes it and `committer()` otherwise, by a 30,000-gas transfer (`paid` true) or was added to `keeperCredits(keeper)` (`paid` false). Emitted after `CallbackAttempted`.
 
 #### <a id="coordinator-event-fulfillmentskipped"></a>`FulfillmentSkipped`
 
@@ -784,7 +784,7 @@ At acceptance, when the keeper share is non-zero: `amount` went to `keeper`, the
 event FulfillmentSkipped(uint256 indexed requestId, uint8 reason)
 ```
 
-Topic 0 `0x45d96bda73a91db41bdeab56114e5d7b9f42c9f38add9e2d2c6d6f5761203ca3` · Emitted by: [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 160–161, 406–407
+Topic 0 `0x45d96bda73a91db41bdeab56114e5d7b9f42c9f38add9e2d2c6d6f5761203ca3` · Emitted by: [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 161–162, 407–408
 
 A batch member was left untouched: `reason` 1 already fulfilled, 2 refunded, 3 past its deadline.
 
@@ -794,7 +794,7 @@ A batch member was left untouched: `reason` 1 already fulfilled, 2 refunded, 3 p
 event RequestRefundedTo(uint256 indexed requestId, address indexed refundAddress, uint256 amount, bool paid)
 ```
 
-Topic 0 `0x0f6107d218fea62a20553f3700dba7c94dcf653bd2027c0bf1ebe0832f42a506` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest) · Source: `D20VRFCoordinator.sol` lines 154, 477
+Topic 0 `0x0f6107d218fea62a20553f3700dba7c94dcf653bd2027c0bf1ebe0832f42a506` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest) · Source: `D20VRFCoordinator.sol` lines 155, 486
 
 An expired request was refunded: `amount` (`feePaid × requestRefundBps / 10000`) was sent to `refundAddress` (`paid` true) or added to its refund credit (`paid` false).
 
@@ -804,7 +804,7 @@ An expired request was refunded: `amount` (`feePaid × requestRefundBps / 10000`
 event RefundCallbackAttempted(uint256 indexed requestId, address indexed consumer, bool success, uint32 gasLimit)
 ```
 
-Topic 0 `0x88448c9fbcfc67f28f0266e82766e402ccd28115fbb84edb6e5b2597effe83d8` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback) · Source: `D20VRFCoordinator.sol` lines 156, 491–502
+Topic 0 `0x88448c9fbcfc67f28f0266e82766e402ccd28115fbb84edb6e5b2597effe83d8` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback) · Source: `D20VRFCoordinator.sol` lines 157, 500–511
 
 Result of calling `onRefund(requestId)` on `consumer` with `gasLimit` gas: 100,000 at `refundRequest`, the caller's limit at `retryRefundCallback`.
 
@@ -816,7 +816,7 @@ Result of calling `onRefund(requestId)` on `consumer` with `gasLimit` gas: 100,0
 event RefundCreditWithdrawn(address indexed owner, address indexed recipient, uint256 amount)
 ```
 
-Topic 0 `0x9d520065b24fda0469128acd3f3078de7e43d70ab762aeea8c741bde25070192` · Emitted by: [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit) · Source: `D20VRFCoordinator.sol` lines 155, 513
+Topic 0 `0x9d520065b24fda0469128acd3f3078de7e43d70ab762aeea8c741bde25070192` · Emitted by: [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit) · Source: `D20VRFCoordinator.sol` lines 156, 522
 
 `owner`, the credit holder (not the contract owner), withdrew `amount` of refund credit to `recipient`.
 
@@ -826,7 +826,7 @@ Topic 0 `0x9d520065b24fda0469128acd3f3078de7e43d70ab762aeea8c741bde25070192` · 
 event KeeperCreditWithdrawn(address indexed keeper, address indexed recipient, uint256 amount)
 ```
 
-Topic 0 `0x22f05c41968705c032a86a65f8fda7e64483ea5e6b6b27a920d1fbfab94267ba` · Emitted by: [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit) · Source: `D20VRFCoordinator.sol` lines 153, 535
+Topic 0 `0x22f05c41968705c032a86a65f8fda7e64483ea5e6b6b27a920d1fbfab94267ba` · Emitted by: [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit) · Source: `D20VRFCoordinator.sol` lines 154, 544
 
 `keeper` withdrew `amount` of keeper credit to `recipient`.
 
@@ -836,7 +836,7 @@ Topic 0 `0x22f05c41968705c032a86a65f8fda7e64483ea5e6b6b27a920d1fbfab94267ba` · 
 event FeesWithdrawn(address indexed recipient, uint256 amount)
 ```
 
-Topic 0 `0xc0819c13be868895eb93e40eaceb96de976442fa1d404e5c55f14bb65a8c489a` · Emitted by: [`withdrawFees`](#coordinator-fn-withdrawfees) · Source: `D20VRFCoordinator.sol` lines 146, 524
+Topic 0 `0xc0819c13be868895eb93e40eaceb96de976442fa1d404e5c55f14bb65a8c489a` · Emitted by: [`withdrawFees`](#coordinator-fn-withdrawfees) · Source: `D20VRFCoordinator.sol` lines 147, 533
 
 The fee recipient withdrew `amount` of earned fees to `recipient`.
 
@@ -848,7 +848,7 @@ The fee recipient withdrew `amount` of earned fees to `recipient`.
 event PricingChanged(uint256 minFee, uint16 feeMultiplier, uint32 fulfillGasOverhead)
 ```
 
-Topic 0 `0x32806eb5e21ac2f5fb7d11f898c2995e19fdf203c8a5aeed8b824506cd0d44ff` · Emitted by: [`setPricing`](#coordinator-fn-setpricing) · Source: `D20VRFCoordinator.sol` lines 149, 208
+Topic 0 `0x32806eb5e21ac2f5fb7d11f898c2995e19fdf203c8a5aeed8b824506cd0d44ff` · Emitted by: [`setPricing`](#coordinator-fn-setpricing) · Source: `D20VRFCoordinator.sol` lines 150, 209
 
 New `minFee`, `feeMultiplier` and `fulfillGasOverhead` for requests created afterwards.
 
@@ -858,7 +858,7 @@ New `minFee`, `feeMultiplier` and `fulfillGasOverhead` for requests created afte
 event RefundBpsChanged(uint16 previousBps, uint16 newBps)
 ```
 
-Topic 0 `0x21e3c4cf3007c4ee385a3936593ff4cfa23fc17bca1175b6350c546f9810e0d8` · Emitted by: [`setRefundBps`](#coordinator-fn-setrefundbps) · Source: `D20VRFCoordinator.sol` lines 150, 216
+Topic 0 `0x21e3c4cf3007c4ee385a3936593ff4cfa23fc17bca1175b6350c546f9810e0d8` · Emitted by: [`setRefundBps`](#coordinator-fn-setrefundbps) · Source: `D20VRFCoordinator.sol` lines 151, 217
 
 New refund ratio for requests created afterwards.
 
@@ -868,7 +868,7 @@ New refund ratio for requests created afterwards.
 event KeeperFeeBpsChanged(uint16 previousBps, uint16 newBps)
 ```
 
-Topic 0 `0xa648a60f1d22511c1cc898ca69b633d1a1114079e83734b9ab9a13e0e28c68b7` · Emitted by: [`setKeeperFeeBps`](#coordinator-fn-setkeeperfeebps) · Source: `D20VRFCoordinator.sol` lines 148, 202
+Topic 0 `0xa648a60f1d22511c1cc898ca69b633d1a1114079e83734b9ab9a13e0e28c68b7` · Emitted by: [`setKeeperFeeBps`](#coordinator-fn-setkeeperfeebps) · Source: `D20VRFCoordinator.sol` lines 149, 203
 
 New keeper share, applied at later acceptances, including of requests already open.
 
@@ -878,7 +878,7 @@ New keeper share, applied at later acceptances, including of requests already op
 event FeeRecipientChanged(address indexed previousRecipient, address indexed newRecipient)
 ```
 
-Topic 0 `0x0bc21fe5c3ab742ff1d15b5c4477ffbacf1167e618228078fa625edebe7f331d` · Emitted by: [`setFeeRecipient`](#coordinator-fn-setfeerecipient) · Source: `D20VRFCoordinator.sol` lines 147, 198
+Topic 0 `0x0bc21fe5c3ab742ff1d15b5c4477ffbacf1167e618228078fa625edebe7f331d` · Emitted by: [`setFeeRecipient`](#coordinator-fn-setfeerecipient) · Source: `D20VRFCoordinator.sol` lines 148, 199
 
 New address allowed to withdraw earned fees.
 
@@ -928,7 +928,7 @@ Topic 0 `0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2` · 
 
 #### <a id="coordinator-error-contractconsumerrequired"></a>`ContractConsumerRequired`
 
-`error ContractConsumerRequired()` · Selector `0x2b99db1e` · Source: `D20VRFCoordinator.sol` lines 110, 250
+`error ContractConsumerRequired()` · Selector `0x2b99db1e` · Source: `D20VRFCoordinator.sol` lines 111, 251
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness).
 
@@ -938,7 +938,7 @@ The caller of a request function has no code: an externally owned account, or a 
 
 #### <a id="coordinator-error-invalidrefundaddress"></a>`InvalidRefundAddress`
 
-`error InvalidRefundAddress()` · Selector `0xe2fe2726` · Source: `D20VRFCoordinator.sol` lines 124, 251, 506
+`error InvalidRefundAddress()` · Selector `0xe2fe2726` · Source: `D20VRFCoordinator.sol` lines 125, 252, 515
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness), [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit).
 
@@ -948,7 +948,7 @@ A request named the zero address as refund address, or `withdrawRefundCredit` na
 
 #### <a id="coordinator-error-invalidcallbackgas"></a>`InvalidCallbackGas`
 
-`error InvalidCallbackGas()` · Selector `0x35883c54` · Source: `D20VRFCoordinator.sol` lines 112, 451, 487, 598–600
+`error InvalidCallbackGas()` · Selector `0x35883c54` · Source: `D20VRFCoordinator.sol` lines 113, 460, 496, 607–609
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness), [`retryCallback`](#coordinator-fn-retrycallback), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback).
 
@@ -958,7 +958,7 @@ A gas limit is out of range: a request `callbackGasLimit` outside 30,000 to 1,00
 
 #### <a id="coordinator-error-incorrectfee"></a>`IncorrectFee`
 
-`error IncorrectFee(uint256 expected, uint256 actual)` · Selector `0xdcf6afcb` · Source: `D20VRFCoordinator.sol` lines 111, 254
+`error IncorrectFee(uint256 expected, uint256 actual)` · Selector `0xdcf6afcb` · Source: `D20VRFCoordinator.sol` lines 112, 255
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness).
 
@@ -968,7 +968,7 @@ A gas limit is out of range: a request `callbackGasLimit` outside 30,000 to 1,00
 
 #### <a id="coordinator-error-feeoverflow"></a>`FeeOverflow`
 
-`error FeeOverflow()` · Selector `0x8181adca` · Source: `D20VRFCoordinator.sol` lines 135, 224
+`error FeeOverflow()` · Selector `0x8181adca` · Source: `D20VRFCoordinator.sol` lines 136, 225
 
 **Raised by:** [`quoteFee`](#coordinator-fn-quotefee), [`quoteFeeAt`](#coordinator-fn-quotefeeat), [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness).
 
@@ -988,7 +988,7 @@ The spec breaks the rules for its operation (README [Randomness options](README.
 
 #### <a id="coordinator-error-epochunavailable"></a>`EpochUnavailable`
 
-`error EpochUnavailable()` · Selector `0x0b3487b8` · Source: `D20VRFCoordinator.sol` lines 108, 258
+`error EpochUnavailable()` · Selector `0x0b3487b8` · Source: `D20VRFCoordinator.sol` lines 109, 259
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness).
 
@@ -1000,7 +1000,7 @@ The request block is before the registry's first epoch: `epochForBlock(block.num
 
 #### <a id="coordinator-error-unknownrequest"></a>`UnknownRequest`
 
-`error UnknownRequest()` · Selector `0x6d080297` · Source: `D20VRFCoordinator.sol` lines 113, 538–541
+`error UnknownRequest()` · Selector `0x6d080297` · Source: `D20VRFCoordinator.sol` lines 114, 547–550
 
 **Raised by:** [`getRequest`](#coordinator-fn-getrequest), [`getMapping`](#coordinator-fn-getmapping), [`getMappedResult`](#coordinator-fn-getmappedresult), [`requestFeePaid`](#coordinator-fn-requestfeepaid), [`requestRefundBps`](#coordinator-fn-requestrefundbps), [`refundRequest`](#coordinator-fn-refundrequest), [`retryCallback`](#coordinator-fn-retrycallback), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof), [`requestSeed`](#coordinator-fn-requestseed), [`getProofContext`](#coordinator-fn-getproofcontext).
 
@@ -1010,7 +1010,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-notfulfilled"></a>`NotFulfilled`
 
-`error NotFulfilled()` · Selector `0x07bc6c3e` · Source: `D20VRFCoordinator.sol` lines 117, 346, 448
+`error NotFulfilled()` · Selector `0x07bc6c3e` · Source: `D20VRFCoordinator.sol` lines 118, 347, 457
 
 **Raised by:** [`getMappedResult`](#coordinator-fn-getmappedresult), [`retryCallback`](#coordinator-fn-retrycallback).
 
@@ -1020,7 +1020,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-alreadydelivered"></a>`AlreadyDelivered`
 
-`error AlreadyDelivered()` · Selector `0xb9f79653` · Source: `D20VRFCoordinator.sol` lines 118, 449
+`error AlreadyDelivered()` · Selector `0xb9f79653` · Source: `D20VRFCoordinator.sol` lines 119, 458
 
 **Raised by:** [`retryCallback`](#coordinator-fn-retrycallback).
 
@@ -1030,7 +1030,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-refundnotavailable"></a>`RefundNotAvailable`
 
-`error RefundNotAvailable()` · Selector `0x0b4d6981` · Source: `D20VRFCoordinator.sol` lines 127, 460
+`error RefundNotAvailable()` · Selector `0x0b4d6981` · Source: `D20VRFCoordinator.sol` lines 128, 469
 
 **Raised by:** [`refundRequest`](#coordinator-fn-refundrequest).
 
@@ -1040,7 +1040,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-notrefunded"></a>`NotRefunded`
 
-`error NotRefunded()` · Selector `0xfae7079c` · Source: `D20VRFCoordinator.sol` lines 130, 484
+`error NotRefunded()` · Selector `0xfae7079c` · Source: `D20VRFCoordinator.sol` lines 131, 493
 
 **Raised by:** [`retryRefundCallback`](#coordinator-fn-retryrefundcallback).
 
@@ -1050,7 +1050,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-refundcallbackalreadydelivered"></a>`RefundCallbackAlreadyDelivered`
 
-`error RefundCallbackAlreadyDelivered()` · Selector `0x6502f8ae` · Source: `D20VRFCoordinator.sol` lines 131, 485
+`error RefundCallbackAlreadyDelivered()` · Selector `0x6502f8ae` · Source: `D20VRFCoordinator.sol` lines 132, 494
 
 **Raised by:** [`retryRefundCallback`](#coordinator-fn-retryrefundcallback).
 
@@ -1060,7 +1060,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-insufficientcallbackgas"></a>`InsufficientCallbackGas`
 
-`error InsufficientCallbackGas()` · Selector `0xa2c23f0d` · Source: `D20VRFCoordinator.sol` lines 121, 469, 494, 610–611
+`error InsufficientCallbackGas()` · Selector `0xa2c23f0d` · Source: `D20VRFCoordinator.sol` lines 122, 478, 503, 619–620
 
 **Raised by:** [`refundRequest`](#coordinator-fn-refundrequest), [`retryCallback`](#coordinator-fn-retrycallback), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch).
 
@@ -1072,7 +1072,7 @@ Too little gas remained to forward the full callback budget and keep the coordin
 
 #### <a id="coordinator-error-norefundcredit"></a>`NoRefundCredit`
 
-`error NoRefundCredit()` · Selector `0x1d59da8e` · Source: `D20VRFCoordinator.sol` lines 128, 508
+`error NoRefundCredit()` · Selector `0x1d59da8e` · Source: `D20VRFCoordinator.sol` lines 129, 517
 
 **Raised by:** [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit).
 
@@ -1082,7 +1082,7 @@ Too little gas remained to forward the full callback budget and keep the coordin
 
 #### <a id="coordinator-error-transferfailed"></a>`TransferFailed`
 
-`error TransferFailed()` · Selector `0x90b8ec18` · Source: `D20VRFCoordinator.sol` lines 123, 512, 523, 534
+`error TransferFailed()` · Selector `0x90b8ec18` · Source: `D20VRFCoordinator.sol` lines 124, 521, 532, 543
 
 **Raised by:** [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit), [`withdrawFees`](#coordinator-fn-withdrawfees), [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit).
 
@@ -1092,7 +1092,7 @@ The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCred
 
 #### <a id="coordinator-error-onlyfeerecipient"></a>`OnlyFeeRecipient`
 
-`error OnlyFeeRecipient()` · Selector `0x07d8ed3d` · Source: `D20VRFCoordinator.sol` lines 122, 518
+`error OnlyFeeRecipient()` · Selector `0x07d8ed3d` · Source: `D20VRFCoordinator.sol` lines 123, 527
 
 **Raised by:** [`withdrawFees`](#coordinator-fn-withdrawfees).
 
@@ -1102,7 +1102,7 @@ The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCred
 
 #### <a id="coordinator-error-nokeepercredit"></a>`NoKeeperCredit`
 
-`error NoKeeperCredit()` · Selector `0x0d106640` · Source: `D20VRFCoordinator.sol` lines 129, 530
+`error NoKeeperCredit()` · Selector `0x0d106640` · Source: `D20VRFCoordinator.sol` lines 130, 539
 
 **Raised by:** [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit).
 
@@ -1114,7 +1114,7 @@ The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCred
 
 #### <a id="coordinator-error-notready"></a>`NotReady`
 
-`error NotReady()` · Selector `0x9488aaa6` · Source: `D20VRFCoordinator.sol` lines 114, 555
+`error NotReady()` · Selector `0x9488aaa6` · Source: `D20VRFCoordinator.sol` lines 115, 564
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof), [`requestSeed`](#coordinator-fn-requestseed), [`getProofContext`](#coordinator-fn-getproofcontext).
 
@@ -1124,7 +1124,7 @@ The request cannot be proven yet: its epoch packet is not published, or `block.n
 
 #### <a id="coordinator-error-blockhashunavailable"></a>`BlockHashUnavailable`
 
-`error BlockHashUnavailable()` · Selector `0xbfc9f0d3` · Source: `D20VRFCoordinator.sol` lines 115, 558
+`error BlockHashUnavailable()` · Selector `0xbfc9f0d3` · Source: `D20VRFCoordinator.sol` lines 116, 567
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof), [`requestSeed`](#coordinator-fn-requestseed), [`getProofContext`](#coordinator-fn-getproofcontext).
 
@@ -1134,7 +1134,7 @@ The target block hash was never stored and is outside the 256-block `BLOCKHASH` 
 
 #### <a id="coordinator-error-alreadyfulfilled"></a>`AlreadyFulfilled`
 
-`error AlreadyFulfilled()` · Selector `0x4a4117f9` · Source: `D20VRFCoordinator.sol` lines 116, 392
+`error AlreadyFulfilled()` · Selector `0x4a4117f9` · Source: `D20VRFCoordinator.sol` lines 117, 393
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness).
 
@@ -1144,7 +1144,7 @@ The target block hash was never stored and is outside the 256-block `BLOCKHASH` 
 
 #### <a id="coordinator-error-requestrefunded"></a>`RequestRefunded`
 
-`error RequestRefunded()` · Selector `0xe0dec416` · Source: `D20VRFCoordinator.sol` lines 126, 393
+`error RequestRefunded()` · Selector `0xe0dec416` · Source: `D20VRFCoordinator.sol` lines 127, 394
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness).
 
@@ -1154,7 +1154,7 @@ The target block hash was never stored and is outside the 256-block `BLOCKHASH` 
 
 #### <a id="coordinator-error-requestexpired"></a>`RequestExpired`
 
-`error RequestExpired()` · Selector `0xfef01cd2` · Source: `D20VRFCoordinator.sol` lines 125, 394
+`error RequestExpired()` · Selector `0xfef01cd2` · Source: `D20VRFCoordinator.sol` lines 126, 395
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness).
 
@@ -1164,7 +1164,7 @@ The target block hash was never stored and is outside the 256-block `BLOCKHASH` 
 
 #### <a id="coordinator-error-wrongpublickey"></a>`WrongPublicKey`
 
-`error WrongPublicKey()` · Selector `0x2b0bb68e` · Source: `D20VRFCoordinator.sol` lines 119, 583
+`error WrongPublicKey()` · Selector `0x2b0bb68e` · Source: `D20VRFCoordinator.sol` lines 120, 592
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof).
 
@@ -1174,7 +1174,7 @@ The proof's `pk` is not the coordinator's VRF key.
 
 #### <a id="coordinator-error-wrongseed"></a>`WrongSeed`
 
-`error WrongSeed()` · Selector `0xf36cbea4` · Source: `D20VRFCoordinator.sol` lines 120, 585
+`error WrongSeed()` · Selector `0xf36cbea4` · Source: `D20VRFCoordinator.sol` lines 121, 594
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof).
 
@@ -1184,7 +1184,7 @@ The proof's `seed` differs from `requestSeed(requestId)`.
 
 #### <a id="coordinator-error-evidencepackettoolarge"></a>`EvidencePacketTooLarge`
 
-`error EvidencePacketTooLarge()` · Selector `0xcfbc3ebf` · Source: `D20VRFCoordinator.sol` lines 133, 441
+`error EvidencePacketTooLarge()` · Selector `0xcfbc3ebf` · Source: `D20VRFCoordinator.sol` lines 134, 450
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch).
 
@@ -1194,7 +1194,7 @@ The encoded proof exceeds `MAX_EVIDENCE_PACKET_BYTES`. A proof always encodes to
 
 #### <a id="coordinator-error-invalidbatch"></a>`InvalidBatch`
 
-`error InvalidBatch()` · Selector `0x33b094a1` · Source: `D20VRFCoordinator.sol` lines 136, 403
+`error InvalidBatch()` · Selector `0x33b094a1` · Source: `D20VRFCoordinator.sol` lines 137, 404
 
 **Raised by:** [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch).
 
@@ -1204,7 +1204,7 @@ The encoded proof exceeds `MAX_EVIDENCE_PACKET_BYTES`. A proof always encodes to
 
 #### <a id="coordinator-error-invalidscan"></a>`InvalidScan`
 
-`error InvalidScan()` · Selector `0x3e6249a2` · Source: `D20VRFCoordinator.sol` lines 132, 315
+`error InvalidScan()` · Selector `0x3e6249a2` · Source: `D20VRFCoordinator.sol` lines 133, 316
 
 **Raised by:** [`getPendingRequestIds`](#coordinator-fn-getpendingrequestids).
 
@@ -1216,7 +1216,7 @@ The encoded proof exceeds `MAX_EVIDENCE_PACKET_BYTES`. A proof always encodes to
 
 #### <a id="coordinator-error-invalidconfig"></a>`InvalidConfig`
 
-`error InvalidConfig()` · Selector `0x35be3ac8` · Source: `D20VRFCoordinator.sol` lines 107, 173–174, 197, 201, 206, 215, 519, 528
+`error InvalidConfig()` · Selector `0x35be3ac8` · Source: `D20VRFCoordinator.sol` lines 108, 174–175, 198, 202, 207, 216, 528, 537
 
 **Raised by:** [`withdrawFees`](#coordinator-fn-withdrawfees), [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit), [`setPricing`](#coordinator-fn-setpricing), [`setRefundBps`](#coordinator-fn-setrefundbps), [`setKeeperFeeBps`](#coordinator-fn-setkeeperfeebps), [`setFeeRecipient`](#coordinator-fn-setfeerecipient), [`initialize`](#coordinator-fn-initialize).
 
@@ -1226,7 +1226,7 @@ A value is out of bounds: in `initialize` (zero fee recipient, confirmations 0 o
 
 #### <a id="coordinator-error-invalidpublickey"></a>`InvalidPublicKey`
 
-`error InvalidPublicKey()` · Selector `0xa2d0fee8` · Source: `D20VRFCoordinator.sol` lines 109, 176
+`error InvalidPublicKey()` · Selector `0xa2d0fee8` · Source: `D20VRFCoordinator.sol` lines 110, 177
 
 **Raised by:** [`initialize`](#coordinator-fn-initialize).
 
@@ -1266,7 +1266,7 @@ A `nonReentrant` coordinator function (a request, `storeBlockHash`, a fulfillmen
 
 #### <a id="coordinator-error-renouncedisabled"></a>`RenounceDisabled`
 
-`error RenounceDisabled()` · Selector `0x89051165` · Source: `D20VRFCoordinator.sol` lines 134, 194
+`error RenounceDisabled()` · Selector `0x89051165` · Source: `D20VRFCoordinator.sol` lines 135, 195
 
 **Raised by:** [`renounceOwnership`](#coordinator-fn-renounceownership).
 
@@ -1384,7 +1384,7 @@ Source: `EpochEntropy.sol` lines 45–48
 
 Returned by `getEpochSelection` and `getEpochFallbackSelection`.
 
-Source: `EpochEntropy.sol` lines 43–44, 257–268
+Source: `EpochEntropy.sol` lines 43–44, 262–273
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -1399,7 +1399,7 @@ Source: `EpochEntropy.sol` lines 43–44, 257–268
 
 Signed source response passed to `commitEpoch` and `commitEpochFallback`.
 
-Source: `EpochEntropy.sol` lines 42, 275–295
+Source: `EpochEntropy.sol` lines 42, 280–300
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -1417,7 +1417,7 @@ Views, callable by anyone. Epoch IDs start at 1; each epoch lasts `EPOCH_LENGTH`
 function epochForBlock(uint256 number) external view returns (uint64)
 ```
 
-Selector `0x7018ebb1` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 230–232
+Selector `0x7018ebb1` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 235–237
 
 Epoch containing a block: 0 before `firstEpochStart`, otherwise `1 + (number - firstEpochStart) / 200`. A request belongs to `epochForBlock(requestBlock)`.
 
@@ -1427,7 +1427,7 @@ Epoch containing a block: 0 before `firstEpochStart`, otherwise `1 + (number - f
 function epochStart(uint64 epochId) external view returns (uint64)
 ```
 
-Selector `0xa1587509` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 226–229
+Selector `0xa1587509` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 231–234
 
 First block of an epoch: `firstEpochStart + (epochId - 1) × 200`.
 
@@ -1439,7 +1439,7 @@ First block of an epoch: `firstEpochStart + (epochId - 1) × 200`.
 function getEpoch(uint64 epochId) external view returns (EpochEntropy.Epoch)
 ```
 
-Selector `0x12a02c82` · Caller: Anyone (view) · Source: `EpochEntropy.sol` line 247
+Selector `0x12a02c82` · Caller: Anyone (view) · Source: `EpochEntropy.sol` line 252
 
 The published [`EpochEntropy.Epoch`](#registry-type-epochentropy-epoch) record, or all zero while unpublished; it never reverts. A non-zero `epochHash` means published.
 
@@ -1449,7 +1449,7 @@ The published [`EpochEntropy.Epoch`](#registry-type-epochentropy-epoch) record, 
 function catalogAt(uint64 epochId) external view returns (bytes32 hash, uint8[] recipes, address[] signers)
 ```
 
-Selector `0xec993599` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 207–215, 221–225
+Selector `0xec993599` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 212–220, 226–230
 
 The catalog in force for an epoch: its hash and the recipe id and signer of each slot, in slot order. That is the latest scheduled version whose `fromEpoch` is at or below `epochId`, otherwise the initial catalog: recipes 0 to 3 with the initial signers and hash `catalogHash()`. Replay needs this catalog, not the initial signer getters.
 
@@ -1459,7 +1459,7 @@ The catalog in force for an epoch: its hash and the recipe id and signer of each
 function sourceCountAt(uint64 epochId) external view returns (uint256)
 ```
 
-Selector `0x3edc6b12` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 216–220, 221–225
+Selector `0x3edc6b12` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 221–225, 226–230
 
 Number of slots in the catalog in force for an epoch, and so the number of selection attempts, 0 to count - 1.
 
@@ -1469,7 +1469,7 @@ Number of slots in the catalog in force for an epoch, and so the number of selec
 function getRecipe(uint8 recipe) external view returns (bytes32 queryHash, string canonicalRequest, bytes template, string body)
 ```
 
-Selector `0xba01b103` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 127–131, 134–137
+Selector `0xba01b103` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 132–136, 139–142
 
 A registered recipe: `queryHash` (`keccak256` of `canonicalRequest`), the canonical request its signer signs, the data template its signed data must match and the JSON body keepers post to the provider gateway. Registered recipes never change. `readEpochRecipes` in `@d20dao/vrf-sdk/epoch` reads recipes with this view and checks each query hash.
 
@@ -1481,7 +1481,7 @@ A registered recipe: `queryHash` (`keccak256` of `canonicalRequest`), the canoni
 function recipeRequest(uint8 recipe) external view returns (string)
 ```
 
-Selector `0x7ce4b6e0` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 132–137
+Selector `0x7ce4b6e0` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 137–142
 
 Canonical request of a registered recipe, the same string `getRecipe` returns.
 
@@ -1493,7 +1493,7 @@ Canonical request of a registered recipe, the same string `getRecipe` returns.
 function recipeCount() external view returns (uint256)
 ```
 
-Selector `0x69cfdf74` · Caller: Anyone (view) · Source: `EpochEntropy.sol` line 126
+Selector `0x69cfdf74` · Caller: Anyone (view) · Source: `EpochEntropy.sol` line 131
 
 Number of registered recipes; ids run from 0 to `recipeCount() - 1`.
 
@@ -1503,12 +1503,13 @@ Views, callable by anyone.
 
 | Function | Selector | Meaning | Source |
 | --- | --- | --- | --- |
-| <a id="registry-fn-firstepochstart"></a>`firstEpochStart() returns (uint64)` | `0x219f2428` | First block of epoch 1: the initialization block plus 200. | lines 40, 82 |
-| <a id="registry-fn-committer"></a>`committer() returns (address)` | `0x5bc8e8f9` | Primary publishing address. The coordinator pays the keeper share to it at each acceptance, also for epochs a backup committer published. | lines 39, 276 |
-| <a id="registry-fn-isbackupcommitter"></a>`isBackupCommitter(address account) returns (bool)` | `0x1d97e417` | Whether an address may publish epochs besides `committer()`. | line 117 |
-| <a id="registry-fn-backupcommittercount"></a>`backupCommitterCount() returns (uint256)` | `0xa815c5bf` | Number of allowed backup committers, at most `MAX_BACKUP_COMMITTERS`. | lines 62, 106–116 |
-| <a id="registry-fn-cataloghash"></a>`catalogHash() returns (bytes32)` | `0x830c083a` | Initial catalog hash, bound into `protocolConfigurationHash`. Never changes; `catalogAt` gives the catalog of an epoch. | lines 41, 83 |
-| <a id="registry-fn-epochanchors"></a>`epochAnchors(uint64) returns (bytes32)` | `0x48a030fb` | Checkpointed anchor of an epoch (hash of block `epochStart - 1`); zero until a request, `checkpointEpoch` or publication stores it. | lines 53, 236–239 |
+| <a id="registry-fn-firstepochstart"></a>`firstEpochStart() returns (uint64)` | `0x219f2428` | First block of epoch 1: the initialization block plus 200. | lines 40, 83 |
+| <a id="registry-fn-committer"></a>`committer() returns (address)` | `0x5bc8e8f9` | Primary publishing address. The coordinator pays it the keeper share of every request whose proof came from a wallet this registry does not authorize. | lines 39, 281 |
+| <a id="registry-fn-isbackupcommitter"></a>`isBackupCommitter(address account) returns (bool)` | `0x1d97e417` | Whether an address may publish epochs besides `committer()`. | line 118 |
+| <a id="registry-fn-isauthorizedcommitter"></a>`isAuthorizedCommitter(address account) returns (bool)` | `0x1579ab83` | Whether an address may publish epochs at all: `committer()` or an allowed backup committer. The coordinator reads it to decide whether a proof submitter earns the keeper share. | lines 119–121 |
+| <a id="registry-fn-backupcommittercount"></a>`backupCommitterCount() returns (uint256)` | `0xa815c5bf` | Number of allowed backup committers, at most `MAX_BACKUP_COMMITTERS`. | lines 63, 107–117 |
+| <a id="registry-fn-cataloghash"></a>`catalogHash() returns (bytes32)` | `0x830c083a` | Initial catalog hash, bound into `protocolConfigurationHash`. Never changes; `catalogAt` gives the catalog of an epoch. | lines 41, 84 |
+| <a id="registry-fn-epochanchors"></a>`epochAnchors(uint64) returns (bytes32)` | `0x48a030fb` | Checkpointed anchor of an epoch (hash of block `epochStart - 1`); zero until a request, `checkpointEpoch` or publication stores it. | lines 53, 241–244 |
 | <a id="registry-fn-hyperliquidsigner"></a>`hyperliquidSigner() returns (address)` | `0xf2a12563` | Initial-catalog signer of slot 0 (recipe 0, Hyperliquid BTC volume). Never changes; see `catalogAt`. | line 34 |
 | <a id="registry-fn-ethereumblocksigner"></a>`ethereumBlockSigner() returns (address)` | `0xd25eacfc` | Initial-catalog signer of slot 1 (recipe 1, Ethereum block hash). Never changes; see `catalogAt`. | lines 35–36 |
 | <a id="registry-fn-btctradesigner"></a>`btcTradeSigner() returns (address)` | `0xb3b9cbb0` | Initial-catalog signer of slot 2 (recipe 2, TickerLayer BTCUSD). Never changes; see `catalogAt`. | line 37 |
@@ -1524,7 +1525,7 @@ Used by keepers. Publication is restricted to the committer and backup committer
 function getEpochSelection(uint64 epochId) external view returns (EpochEntropy.Selection s)
 ```
 
-Selector `0xec4960ad` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 248, 257–268
+Selector `0xec4960ad` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 253, 262–273
 
 The selected source of an epoch, attempt 0, as an [`EpochEntropy.Selection`](#registry-type-epochentropy-selection).
 
@@ -1536,7 +1537,7 @@ The selected source of an epoch, attempt 0, as an [`EpochEntropy.Selection`](#re
 function getEpochFallbackSelection(uint64 epochId, uint8 attempt) external view returns (EpochEntropy.Selection s)
 ```
 
-Selector `0x0e5a0e02` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 249–250, 257–268
+Selector `0x0e5a0e02` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 254–255, 262–273
 
 The source for attempt 0 to `sourceCountAt(epochId) - 1`; attempt n uses the slot n positions after the selected one.
 
@@ -1548,7 +1549,7 @@ The source for attempt 0 to `sourceCountAt(epochId) - 1`; attempt n uses the slo
 function fallbackOpensAt(uint64 epochId, uint8 attempt) external view returns (uint64)
 ```
 
-Selector `0x98208050` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 251–255
+Selector `0x98208050` · Caller: Anyone (view) · Source: `EpochEntropy.sol` lines 256–260
 
 First block at which an attempt may be published: `epochStart + attempt × FALLBACK_DELAY_BLOCKS` (20). With at most `MAX_SOURCES` (10) slots the last window opens 180 blocks into the epoch.
 
@@ -1560,7 +1561,7 @@ First block at which an attempt may be published: `epochStart + attempt × FALLB
 function nextEpochToPrepare(uint256 number) external view returns (uint64)
 ```
 
-Selector `0xc78fafe2` · Caller: Anyone (view) · Source: `EpochEntropy.sol` line 233
+Selector `0xc78fafe2` · Caller: Anyone (view) · Source: `EpochEntropy.sol` line 238
 
 Same value as `epochForBlock(number)`.
 
@@ -1570,7 +1571,7 @@ Same value as `epochForBlock(number)`.
 function checkpointEpoch(uint64 epochId) external returns (bytes32 anchor)
 ```
 
-Selector `0x16de78cb` · Caller: Anyone · Source: `EpochEntropy.sol` lines 234–239, 240–246
+Selector `0x16de78cb` · Caller: Anyone · Source: `EpochEntropy.sol` lines 239–244, 245–251
 
 Stores the anchor of a started epoch (hash of block `epochStart - 1`) if not stored yet, and returns it. The coordinator calls it on every request, so the anchor of an epoch with requests survives the 256-block `BLOCKHASH` window.
 
@@ -1582,7 +1583,7 @@ Stores the anchor of a started epoch (hash of block `epochStart - 1`) if not sto
 function commitEpoch(uint64 epochId, EpochEntropy.Attestation a) external
 ```
 
-Selector `0xb1580277` · Caller: Committer or backup committer · Source: `EpochEntropy.sol` lines 269, 275–295
+Selector `0xb1580277` · Caller: Committer or backup committer · Source: `EpochEntropy.sol` lines 274, 280–300
 
 Publishes the packet of the selected source once per epoch, from the epoch start: checks that the attestation is not future-dated and at most 240 seconds old, that its data matches the data template of the slot's recipe exactly, and that the slot's signer in the epoch's catalog signed it. Stores the record and emits the packet. Whoever publishes, the keeper share of the epoch's requests goes to `committer()`.
 
@@ -1596,7 +1597,7 @@ Publishes the packet of the selected source once per epoch, from the epoch start
 function commitEpochFallback(uint64 epochId, uint8 attempt, EpochEntropy.Attestation a) external
 ```
 
-Selector `0x5768d9a1` · Caller: Committer or backup committer · Source: `EpochEntropy.sol` lines 270–274, 275–295
+Selector `0x5768d9a1` · Caller: Committer or backup committer · Source: `EpochEntropy.sol` lines 275–279, 280–300
 
 Publishes fallback attempt 1 to `sourceCountAt(epochId) - 1`, using the slot `attempt` positions after the selected source, once `fallbackOpensAt(epochId, attempt)` is reached. Same checks as `commitEpoch`.
 
@@ -1614,7 +1615,7 @@ Owner-only; on Arc Mainnet the owner is the DAO treasury Safe. A recipe or catal
 function registerRecipe(string canonicalRequest, bytes template, string body) external returns (uint8 recipe)
 ```
 
-Selector `0x5add5c50` · Caller: Owner · Source: `EpochEntropy.sol` lines 118–125, 138–147
+Selector `0x5add5c50` · Caller: Owner · Source: `EpochEntropy.sol` lines 123–130, 143–152
 
 Appends an immutable recipe and returns its id, the next index. The canonical request is 1 to `MAX_REQUEST_BYTES` (1024) bytes, the body 1 to `MAX_BODY_BYTES` (2048) bytes, and the template must be a well-formed data template of at most `MAX_TEMPLATE_BYTES` (256) bytes; at most `MAX_RECIPES` (256) recipes exist. The contract does not check that the body canonicalizes to the request; keepers refuse a recipe whose body does not. A changed listing is registered as a new id.
 
@@ -1628,7 +1629,7 @@ Appends an immutable recipe and returns its id, the next index. The canonical re
 function scheduleCatalog(uint8[] recipes, address[] signers, uint64 fromEpoch) external
 ```
 
-Selector `0x42984450` · Caller: Owner · Source: `EpochEntropy.sol` lines 185–206
+Selector `0x42984450` · Caller: Owner · Source: `EpochEntropy.sol` lines 190–211
 
 Schedules a catalog for epochs from `fromEpoch`, which must be at least two epochs after the current one: 1 to `MAX_SOURCES` (10) distinct registered recipe ids with one non-zero signer each, in slot order. Its hash is `keccak256(abi.encode(RECIPE_DOMAIN, recipes, signers))`. If the latest scheduled version has not taken effect yet (its `fromEpoch` is after the current epoch) it is replaced, so that version never applies; this can return the next epoch to the previous catalog. The current epoch keeps its catalog.
 
@@ -1642,7 +1643,7 @@ Schedules a catalog for epochs from `fromEpoch`, which must be at least two epoc
 function initializeRecipeRegistry() external
 ```
 
-Selector `0x8700b456` · Caller: Owner, once per proxy, as the `upgradeToAndCall` data of the recipe-registry upgrade · Source: `EpochEntropy.sol` lines 86–94
+Selector `0x8700b456` · Caller: Owner, once per proxy, as the `upgradeToAndCall` data of the recipe-registry upgrade · Source: `EpochEntropy.sol` lines 87–95
 
 Registers built-in recipes 0 to 5 on a registry initialized before the recipe registry, whose initial catalog selects recipes 0 to 3. It runs once per proxy (reinitializer version 2) and refuses a registry that already has recipes, which includes every registry initialized by this implementation, or a catalog scheduled under the earlier hardcoded recipe ids.
 
@@ -1660,7 +1661,7 @@ Owner-only functions revert `OwnableUnauthorizedAccount` for anyone else. No set
 function setCommitter(address next) external
 ```
 
-Selector `0xdd51ce22` · Caller: Owner · Source: `EpochEntropy.sol` lines 99–102
+Selector `0xdd51ce22` · Caller: Owner · Source: `EpochEntropy.sol` lines 100–103
 
 Changes the primary publishing address, which is also the keeper-share recipient the coordinator reads at each acceptance.
 
@@ -1674,9 +1675,9 @@ Changes the primary publishing address, which is also the keeper-share recipient
 function setBackupCommitter(address account, bool allowed) external
 ```
 
-Selector `0xd870d0c6` · Caller: Owner · Source: `EpochEntropy.sol` lines 103–116
+Selector `0xd870d0c6` · Caller: Owner · Source: `EpochEntropy.sol` lines 104–117
 
-Allows or removes a backup committer: a separate wallet that may call `commitEpoch` and `commitEpochFallback` under exactly the committer's rules, for example a follower keeper that takes over while the primary keeper is down. It earns nothing; the coordinator keeps paying the keeper share to `committer()`. Reverts for the zero address, for allowing the current committer, for a call that does not change the address's status, and for more than `MAX_BACKUP_COMMITTERS` (4).
+Allows or removes a backup committer: a separate wallet that may call `commitEpoch` and `commitEpochFallback` under exactly the committer's rules, for example a follower keeper that takes over while the primary keeper is down. It has no other role, and the coordinator pays it the keeper share of the requests whose accepted proofs it submits itself. Reverts for the zero address, for allowing the current committer, for a call that does not change the address's status, and for more than `MAX_BACKUP_COMMITTERS` (4).
 
 **Emits:** [`BackupCommitterSet`](#registry-event-backupcommitterset).
 
@@ -1736,7 +1737,7 @@ Completes the transfer to the caller and clears the nomination.
 function renounceOwnership() external view
 ```
 
-Selector `0x715018a6` · Caller: Owner · Source: `EpochEntropy.sol` lines 96–97
+Selector `0x715018a6` · Caller: Owner · Source: `EpochEntropy.sol` lines 97–98
 
 Disabled and declared `view`: the owner gets `RenounceDisabled` and anyone else `OwnableUnauthorizedAccount`, so the contract always has an owner and upgrade authority can only move through an accepted transfer.
 
@@ -1774,7 +1775,7 @@ ERC-1822 check used by `upgradeToAndCall`. Returns the ERC-1967 implementation s
 function initialize(address[4] signers, address initialOwner, address initialCommitter) external
 ```
 
-Selector `0xfda9f5ca` · Caller: Once, by `D20Proxy` at deployment · Source: `EpochEntropy.sol` lines 77–85
+Selector `0xfda9f5ca` · Caller: Once, by `D20Proxy` at deployment · Source: `EpochEntropy.sol` lines 78–86
 
 Sets the four initial-catalog signers of recipes 0 to 3, the owner and the committer, and registers built-in recipes 0 to 5. Epoch 1 starts 200 blocks after the initialization block.
 
@@ -1814,7 +1815,7 @@ Views returning values fixed in the implementation code.
 event EpochCommitted(uint64 indexed epochId, bytes32 indexed epochHash, bytes packet)
 ```
 
-Topic 0 `0xc9db8d1389570196eda0f2c6c4e2f78429c2f812db30b6b1022b5e0b5162ef72` · Emitted by: [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback) · Source: `EpochEntropy.sol` lines 70, 292–294
+Topic 0 `0xc9db8d1389570196eda0f2c6c4e2f78429c2f812db30b6b1022b5e0b5162ef72` · Emitted by: [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback) · Source: `EpochEntropy.sol` lines 71, 297–299
 
 An epoch was published. `packet` is `abi.encode(canonicalRequest, attestation)`: decode it with `decodeEpochEvidencePacket` and verify with `replayEpochCommitment`. Requests of the epoch now have a target block.
 
@@ -1824,7 +1825,7 @@ An epoch was published. `packet` is `abi.encode(canonicalRequest, attestation)`:
 event RecipeRegistered(uint8 indexed recipe, bytes32 indexed queryHash, string canonicalRequest, bytes template, string body)
 ```
 
-Topic 0 `0xbc5c1e3f4647d7f37dc8b4fe5e26e7c58ae35b8c9fb1db0233ddedba0d7f5fd8` · Emitted by: [`registerRecipe`](#registry-fn-registerrecipe), [`initializeRecipeRegistry`](#registry-fn-initializereciperegistry), [`initialize`](#registry-fn-initialize) · Source: `EpochEntropy.sol` lines 73, 146
+Topic 0 `0xbc5c1e3f4647d7f37dc8b4fe5e26e7c58ae35b8c9fb1db0233ddedba0d7f5fd8` · Emitted by: [`registerRecipe`](#registry-fn-registerrecipe), [`initializeRecipeRegistry`](#registry-fn-initializereciperegistry), [`initialize`](#registry-fn-initialize) · Source: `EpochEntropy.sol` lines 74, 151
 
 Recipe `recipe` was registered. The event carries the complete definition, so every recipe can be rebuilt from logs; `getRecipe` returns the same values.
 
@@ -1834,7 +1835,7 @@ Recipe `recipe` was registered. The event carries the complete definition, so ev
 event CatalogScheduled(uint64 indexed fromEpoch, bytes32 indexed catalogHash, uint8[] recipes, address[] signers)
 ```
 
-Topic 0 `0xc91bcd562b1edaabdb2772ada76957511610c715ef892b9c9af1f35be93c3c4f` · Emitted by: [`scheduleCatalog`](#registry-fn-schedulecatalog) · Source: `EpochEntropy.sol` lines 72, 205
+Topic 0 `0xc91bcd562b1edaabdb2772ada76957511610c715ef892b9c9af1f35be93c3c4f` · Emitted by: [`scheduleCatalog`](#registry-fn-schedulecatalog) · Source: `EpochEntropy.sol` lines 73, 210
 
 A catalog was scheduled for epochs from `fromEpoch`: recipe ids and signers in slot order. A later `CatalogScheduled` emitted while this version has not taken effect replaces it, so when rebuilding catalogs from history drop replaced versions, or read `catalogAt(epochId)`.
 
@@ -1846,7 +1847,7 @@ A catalog was scheduled for epochs from `fromEpoch`: recipe ids and signers in s
 event CommitterChanged(address indexed previousCommitter, address indexed newCommitter)
 ```
 
-Topic 0 `0x3f67cc70f736070aaac75db90cef1ab4047521b73e8a38d02852e8bf1a91e7e0` · Emitted by: [`setCommitter`](#registry-fn-setcommitter) · Source: `EpochEntropy.sol` lines 71, 101
+Topic 0 `0x3f67cc70f736070aaac75db90cef1ab4047521b73e8a38d02852e8bf1a91e7e0` · Emitted by: [`setCommitter`](#registry-fn-setcommitter) · Source: `EpochEntropy.sol` lines 72, 102
 
 New primary publishing address and keeper-share recipient.
 
@@ -1856,7 +1857,7 @@ New primary publishing address and keeper-share recipient.
 event BackupCommitterSet(address indexed account, bool allowed)
 ```
 
-Topic 0 `0x20380b8c17d904db7d905a51f1538057d280a6cecca38882832ba0261b39fa66` · Emitted by: [`setBackupCommitter`](#registry-fn-setbackupcommitter) · Source: `EpochEntropy.sol` lines 74, 115
+Topic 0 `0x20380b8c17d904db7d905a51f1538057d280a6cecca38882832ba0261b39fa66` · Emitted by: [`setBackupCommitter`](#registry-fn-setbackupcommitter) · Source: `EpochEntropy.sol` lines 75, 116
 
 `account` may now publish epochs (`allowed` true) or no longer may (`allowed` false).
 
@@ -1906,7 +1907,7 @@ Topic 0 `0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2` · 
 
 #### <a id="registry-error-invalidepoch"></a>`InvalidEpoch`
 
-`error InvalidEpoch()` · Selector `0xd5b25b63` · Source: `EpochEntropy.sol` lines 65, 199, 227
+`error InvalidEpoch()` · Selector `0xd5b25b63` · Source: `EpochEntropy.sol` lines 66, 204, 232
 
 **Raised by:** [`epochStart`](#registry-fn-epochstart), [`getEpochSelection`](#registry-fn-getepochselection), [`getEpochFallbackSelection`](#registry-fn-getepochfallbackselection), [`fallbackOpensAt`](#registry-fn-fallbackopensat), [`checkpointEpoch`](#registry-fn-checkpointepoch), [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback), [`scheduleCatalog`](#registry-fn-schedulecatalog).
 
@@ -1916,7 +1917,7 @@ Epoch 0 was passed to `epochStart`, `fallbackOpensAt`, a selection view, `checkp
 
 #### <a id="registry-error-preparationclosed"></a>`PreparationClosed`
 
-`error PreparationClosed()` · Selector `0x8e2a3c7d` · Source: `EpochEntropy.sol` lines 65, 242
+`error PreparationClosed()` · Selector `0x8e2a3c7d` · Source: `EpochEntropy.sol` lines 66, 247
 
 **Raised by:** [`getEpochSelection`](#registry-fn-getepochselection), [`getEpochFallbackSelection`](#registry-fn-getepochfallbackselection), [`checkpointEpoch`](#registry-fn-checkpointepoch).
 
@@ -1926,7 +1927,7 @@ The epoch has not started (`block.number` is below `epochStart(epochId)`), so it
 
 #### <a id="registry-error-anchorunavailable"></a>`AnchorUnavailable`
 
-`error AnchorUnavailable()` · Selector `0x60776ed3` · Source: `EpochEntropy.sol` lines 65, 245
+`error AnchorUnavailable()` · Selector `0x60776ed3` · Source: `EpochEntropy.sol` lines 66, 250
 
 **Raised by:** [`getEpochSelection`](#registry-fn-getepochselection), [`getEpochFallbackSelection`](#registry-fn-getepochfallbackselection), [`checkpointEpoch`](#registry-fn-checkpointepoch), [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1938,7 +1939,7 @@ The anchor (hash of block `epochStart - 1`) was never checkpointed and is outsid
 
 #### <a id="registry-error-onlycommitter"></a>`OnlyCommitter`
 
-`error OnlyCommitter()` · Selector `0xfffe5af3` · Source: `EpochEntropy.sol` lines 66, 276
+`error OnlyCommitter()` · Selector `0xfffe5af3` · Source: `EpochEntropy.sol` lines 67, 281
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1948,7 +1949,7 @@ A commit from an address that is neither `committer()` nor an allowed backup com
 
 #### <a id="registry-error-alreadycommitted"></a>`AlreadyCommitted`
 
-`error AlreadyCommitted()` · Selector `0xbfec5558` · Source: `EpochEntropy.sol` lines 66, 277
+`error AlreadyCommitted()` · Selector `0xbfec5558` · Source: `EpochEntropy.sol` lines 67, 282
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1958,7 +1959,7 @@ The epoch already has a published packet.
 
 #### <a id="registry-error-fallbacknotopen"></a>`FallbackNotOpen`
 
-`error FallbackNotOpen()` · Selector `0xf8635228` · Source: `EpochEntropy.sol` lines 68, 278
+`error FallbackNotOpen()` · Selector `0xf8635228` · Source: `EpochEntropy.sol` lines 69, 283
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1968,7 +1969,7 @@ The epoch already has a published packet.
 
 #### <a id="registry-error-invalidfallback"></a>`InvalidFallback`
 
-`error InvalidFallback()` · Selector `0x5a93724d` · Source: `EpochEntropy.sol` lines 68, 253, 261, 272
+`error InvalidFallback()` · Selector `0x5a93724d` · Source: `EpochEntropy.sol` lines 69, 258, 266, 277
 
 **Raised by:** [`getEpochFallbackSelection`](#registry-fn-getepochfallbackselection), [`fallbackOpensAt`](#registry-fn-fallbackopensat), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1978,7 +1979,7 @@ An attempt at or above `sourceCountAt(epochId)`, or attempt 0 passed to `commitE
 
 #### <a id="registry-error-invalidtime"></a>`InvalidTime`
 
-`error InvalidTime()` · Selector `0x6f7eac26` · Source: `EpochEntropy.sol` lines 66, 280
+`error InvalidTime()` · Selector `0x6f7eac26` · Source: `EpochEntropy.sol` lines 67, 285
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1988,7 +1989,7 @@ The attestation timestamp is in the future or more than `MAX_ATTESTATION_AGE` (2
 
 #### <a id="registry-error-invaliddata"></a>`InvalidData`
 
-`error InvalidData()` · Selector `0x5cb045db` · Source: `EpochEntropy.sol` lines 66, 281–282
+`error InvalidData()` · Selector `0x5cb045db` · Source: `EpochEntropy.sol` lines 67, 286–287
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -1998,7 +1999,7 @@ The signed data does not match the data template of the slot's recipe exactly, w
 
 #### <a id="registry-error-invalidsigner"></a>`InvalidSigner`
 
-`error InvalidSigner()` · Selector `0x815e1d64` · Source: `EpochEntropy.sol` lines 66, 284
+`error InvalidSigner()` · Selector `0x815e1d64` · Source: `EpochEntropy.sol` lines 67, 289
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -2038,7 +2039,7 @@ The signature has a high `s` value (OpenZeppelin `ECDSA`).
 
 #### <a id="registry-error-packettoolarge"></a>`PacketTooLarge`
 
-`error PacketTooLarge()` · Selector `0xda85e8a5` · Source: `EpochEntropy.sol` lines 67, 293
+`error PacketTooLarge()` · Selector `0xda85e8a5` · Source: `EpochEntropy.sol` lines 68, 298
 
 **Raised by:** [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback).
 
@@ -2050,7 +2051,7 @@ The encoded packet exceeds `MAX_PACKET_BYTES` (2048).
 
 #### <a id="registry-error-invalidrecipe"></a>`InvalidRecipe`
 
-`error InvalidRecipe()` · Selector `0x7b776f4c` · Source: `EpochEntropy.sol` lines 69, 142
+`error InvalidRecipe()` · Selector `0x7b776f4c` · Source: `EpochEntropy.sol` lines 70, 147
 
 **Raised by:** [`registerRecipe`](#registry-fn-registerrecipe).
 
@@ -2060,7 +2061,7 @@ The encoded packet exceeds `MAX_PACKET_BYTES` (2048).
 
 #### <a id="registry-error-invalidtemplate"></a>`InvalidTemplate`
 
-`error InvalidTemplate()` · Selector `0xec55b8cd` · Source: `EpochEntropy.sol` lines 69, 143
+`error InvalidTemplate()` · Selector `0xec55b8cd` · Source: `EpochEntropy.sol` lines 70, 148
 
 **Raised by:** [`registerRecipe`](#registry-fn-registerrecipe).
 
@@ -2070,7 +2071,7 @@ The encoded packet exceeds `MAX_PACKET_BYTES` (2048).
 
 #### <a id="registry-error-invalidconfig"></a>`InvalidConfig`
 
-`error InvalidConfig()` · Selector `0x35be3ac8` · Source: `EpochEntropy.sol` lines 65, 80, 92, 100, 107, 109, 135, 191, 195
+`error InvalidConfig()` · Selector `0x35be3ac8` · Source: `EpochEntropy.sol` lines 66, 81, 93, 101, 108, 110, 140, 196, 200
 
 **Raised by:** [`getRecipe`](#registry-fn-getrecipe), [`recipeRequest`](#registry-fn-reciperequest), [`getEpochSelection`](#registry-fn-getepochselection), [`getEpochFallbackSelection`](#registry-fn-getepochfallbackselection), [`commitEpoch`](#registry-fn-commitepoch), [`commitEpochFallback`](#registry-fn-commitepochfallback), [`scheduleCatalog`](#registry-fn-schedulecatalog), [`initializeRecipeRegistry`](#registry-fn-initializereciperegistry), [`setCommitter`](#registry-fn-setcommitter), [`setBackupCommitter`](#registry-fn-setbackupcommitter), [`initialize`](#registry-fn-initialize).
 
@@ -2100,7 +2101,7 @@ A zero signer or committer in `initialize`; a zero address in `setCommitter`; in
 
 #### <a id="registry-error-renouncedisabled"></a>`RenounceDisabled`
 
-`error RenounceDisabled()` · Selector `0x89051165` · Source: `EpochEntropy.sol` lines 67, 97
+`error RenounceDisabled()` · Selector `0x89051165` · Source: `EpochEntropy.sol` lines 68, 98
 
 **Raised by:** [`renounceOwnership`](#registry-fn-renounceownership).
 

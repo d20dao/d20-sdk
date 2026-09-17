@@ -1,6 +1,6 @@
 {
   "name": "@d20dao/vrf-sdk",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "D20DAO verifiable randomness: Solidity consumer helpers, contract ABIs and public proof replay",
   "publishConfig": {
     "access": "public",
@@ -30,7 +30,8 @@
     "./abi/EpochEntropy.json": "./abi/EpochEntropy.json",
     "./contracts/*": "./contracts/*",
     "./examples/*": "./examples/*",
-    "./AGENTS.md": "./AGENTS.md"
+    "./AGENTS.md": "./AGENTS.md",
+    "./API.md": "./API.md"
   },
   "files": [
     "dist/*.js",
@@ -38,6 +39,7 @@
     "contracts/**/*.sol",
     "examples/*.sol",
     "AGENTS.md",
+    "API.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "notices/*",
@@ -48,6 +50,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "api-reference": "node scripts/api-reference.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm test",
     "test": "node scripts/smoke.mjs"

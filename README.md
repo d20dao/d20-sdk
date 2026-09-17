@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.3`.
+Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.4`.
 
 ## Getting started
 
@@ -8,9 +8,25 @@ Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consu
 npm install @d20dao/vrf-sdk
 ```
 
-Use `@d20dao/vrf-sdk` 0.3.3 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
+Use `@d20dao/vrf-sdk` 0.3.4 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
 
-For agent-assisted integration, give your agent the installed `AGENTS.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). The website guides are on d20dao.org: [guides](https://d20dao.org/docs) including [Getting started](https://d20dao.org/docs/getting-started) with its Copy prompt action, the guide index [d20dao.org/llms.txt](https://d20dao.org/llms.txt), the full text [d20dao.org/llms-full.txt](https://d20dao.org/llms-full.txt) and [d20dao.org/agents.md](https://d20dao.org/agents.md).
+For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). The website guides are on d20dao.org: [guides](https://d20dao.org/docs) including [Getting started](https://d20dao.org/docs/getting-started) with its Copy prompt action, the guide index [d20dao.org/llms.txt](https://d20dao.org/llms.txt), the full text [d20dao.org/llms-full.txt](https://d20dao.org/llms-full.txt) and [d20dao.org/agents.md](https://d20dao.org/agents.md).
+
+## Quick path
+
+1. **Network.** Choose the chain in [Networks](#networks) and take its coordinator proxy from [Deployments](#deployments). Wallet parameters are in [Frontend and backend use](#frontend-and-backend-use).
+2. **Install and compile.** Install the package as above and configure Hardhat or Foundry in [Compiler setup](#compiler-setup).
+3. **Consumer.** Start from [Recommended payment pattern](#recommended-payment-pattern), choose a result type in [Randomness options](#randomness-options) and size the [callback gas limit](#callback-gas-limit).
+4. **Request.** Quote off-chain and send the quoted value through your consumer: [Wallets and backends that pay through a consumer](#wallets-and-backends-that-pay-through-a-consumer).
+5. **Wait and read.** Take `requestId` from the receipt and poll until `fulfilled` or the deadline passes: [Reading results](#reading-results), [Timing](#timing).
+6. **Expiry and recovery.** Refund expired requests and retry failed callbacks with enough gas: [Expiry and refunds](#expiry-and-refunds), [Gas for refund and retry calls](#gas-for-refund-and-retry-calls).
+
+[API.md](API.md) lists every coordinator and registry function, event and error with its selector, caller and, for errors, what to do. [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp that follows these steps.
+
+Two pairs of names are easy to confuse:
+
+- `refundBps()` is the current refund ratio, copied into each new request; `requestRefundBps(requestId)` is the ratio one request copied at creation and is refunded at. Likewise `pricing()` and `quoteFee` price future requests, while `requestFeePaid(requestId)` is what one request escrowed. `keeperFeeBps()` has no per-request copy: it is read when a proof is accepted.
+- `RandomnessMapping.Spec` is the Solidity struct `(operation, lower, upper, count, population)` stored with a request. The TypeScript `MappingSpec` that `builtins` return has the same fields as an object, with `lower` and `upper` as `bigint`; ethers encodes it for the struct unchanged, and `hashMapping(spec)` equals the request's `mappingHash`. "Mapping" means a randomness mapping, not a Solidity `mapping`.
 
 ## Networks
 
@@ -217,11 +233,13 @@ All events come from the coordinator proxy, with `requestId` as the first indexe
 
 Views on the coordinator (all in `coordinatorAbi`; only `getMappedResult` is part of `ID20VRF`, so declare a local interface in Solidity for the others):
 
-- `getRequest(uint256 requestId) returns (Request)` with fields `consumer`, `callbackGasLimit`, `requestBlock`, `targetBlock` (0 until the epoch packet is published), `deadline` (Unix seconds, request time plus 60), `refundAddress`, `clientSeed`, `mappingHash`, `blockHash` (target block hash once stored), `randomness` (zero until fulfilled), `proofHash`, `transcriptHash`, `fulfilled`, `delivered` (callback succeeded), `refunded`, `epochId` and `epochHash` (zero until published). Reverts `UnknownRequest` for an unused ID.
+- `getRequest(uint256 requestId) returns (Request)` with fields `consumer`, `callbackGasLimit`, `requestBlock`, `targetBlock` (0 until the epoch packet is published), `deadline` (Unix seconds, request time plus 60), `refundAddress`, `clientSeed`, `mappingHash`, `blockHash` (target block hash once stored), `randomness` (zero until fulfilled), `proofHash`, `transcriptHash`, `fulfilled`, `delivered` (callback succeeded), `refunded`, `epochId` (fixed at request time) and `epochHash` (zero until published). Reverts `UnknownRequest` for an unused ID.
 - `getMapping(uint256 requestId) returns (RandomnessMapping.Spec)`: the stored `(operation, lower, upper, count, population)`; all zero (Raw) for `requestRandomness`. Reverts `UnknownRequest`.
 - `getMappedResult(uint256 requestId) returns (uint256[])`: the stored word mapped with the stored spec. Reverts `NotFulfilled` before acceptance.
 - `mapRandomness(bytes32 randomness, RandomnessMapping.Spec spec) returns (uint256[])`: pure mapping of any word and spec; it does not show that a request was fulfilled. The SDK's `mapRandomness(word, spec)` returns the same values off-chain.
 - `requestFeePaid(requestId)`, `requestRefundBps(requestId)`, `refundCredits(address)` and `refundCallbackDelivered(requestId)` show settlement.
+
+[API.md](API.md) documents every view, event and error, including the order of events in a receipt.
 
 Polling with ethers 6, after sending the request through a consumer such as `D20Game`:
 
@@ -237,9 +255,10 @@ const requestId = receipt.logs
   .find((event) => event?.name === 'RandomnessRequested').args.requestId;
 
 for (;;) {
+  // Read the block first, so a proof included up to that block is visible in getRequest.
+  const { timestamp } = await provider.getBlock('latest');
   const request = await coordinator.getRequest(requestId);
   if (request.fulfilled) { console.log(await coordinator.getMappedResult(requestId)); break; }
-  const { timestamp } = await provider.getBlock('latest');
   if (BigInt(timestamp) > request.deadline) break; // expired: refundRequest(requestId) is available
   await new Promise((resolve) => setTimeout(resolve, 2000));
 }
@@ -268,8 +287,10 @@ for (;;) {
     }],
   });
   ```
-- Reverts from the coordinator are custom errors, and `coordinatorAbi` includes all of them. Decode revert data with `coordinator.interface.parseError(data)` in ethers, or add the coordinator ABI next to your consumer ABI so the wallet or library can name the error. The ones a consumer meets most often: `IncorrectFee(expected, actual)` (re-quote and resend), `InvalidCallbackGas`, `InvalidMapping` (from `RandomnessMapping`), `ContractConsumerRequired`, `UnknownRequest`, `NotFulfilled`, `RefundNotAvailable` (not yet past the deadline, already served or already refunded), `RequestRefunded` and `InsufficientCallbackGas` (raise the transaction gas limit; see [Gas for refund and retry calls](#gas-for-refund-and-retry-calls)). `OnlyCoordinator` comes from `D20VRFConsumer` and is only in your consumer's ABI.
-- ethers v6 returns structs as `Result` objects that are also arrays. A struct field named like an array method, such as `values`, `length` or `map`, is shadowed; read it by position or choose another field name.
+- Reverts from the coordinator are custom errors, and `coordinatorAbi` includes all of them. Decode revert data with `coordinator.interface.parseError(data)` in ethers, or add the coordinator ABI next to your consumer ABI so the wallet or library can name the error. The ones a consumer meets most often: `IncorrectFee(expected, actual)` (re-quote and resend), `InvalidCallbackGas`, `InvalidMapping` (from `RandomnessMapping`), `ContractConsumerRequired`, `UnknownRequest`, `NotFulfilled`, `RefundNotAvailable` (not yet past the deadline, already served or already refunded), `RequestRefunded` and `InsufficientCallbackGas` (raise the transaction gas limit; see [Gas for refund and retry calls](#gas-for-refund-and-retry-calls)). `OnlyCoordinator` comes from `D20VRFConsumer` and is only in your consumer's ABI. [API.md](API.md) gives every error's selector, the calls that raise it and what to do.
+- ethers v6 returns structs as `Result` objects that are also arrays. A field named like an `Array` or `Result` member, such as `values`, `length` or `map`, is shadowed; read it with `result.getValue('values')`, by position or from `result.toObject()`, or choose another field name.
+- Observed on 2026-09-17 while deploying the demo at https://mainnet-demo.d20dao.org: every public Arc RPC endpoint is on `*.arc.io`, and common browser ad-block filter lists block that domain, so read-only pages failed with `net::ERR_BLOCKED_BY_CLIENT` for many users. Read through the connected wallet's EIP-1193 provider when there is one (check its chain ID first), or serve a same-origin read-only JSON-RPC relay; the demo's [worker/index.js](https://github.com/d20dao/randomizer-demo/blob/main/worker/index.js) forwards only read methods and leaves transactions to the wallet.
+- Also observed on 2026-09-17, not a guarantee: `rpc.mainnet.arc.io` rate-limited batched JSON-RPC calls from shared Cloudflare egress addresses while `rpc.blockdaemon.mainnet.arc.io` accepted them, and the free plan of `rpc.drpc.*.arc.io` rejected batches of more than 3 calls. ethers `JsonRpcProvider` batches up to 100 calls by default; lower `batchMaxCount` in its options (`new JsonRpcProvider(url, 5042, { staticNetwork: true, batchMaxCount: 1 })`) for such endpoints. Poll no faster than you need and cache what cannot change: once `fulfilled` is true, `randomness` and the mapped result are final.
 
 ## Request lifecycle
 
@@ -301,7 +322,7 @@ The minimums were measured with the unmodified protocol sources behind `D20Proxy
 
 ### Batched fulfillment
 
-The keeper may fulfill up to 16 prepared requests in one transaction with `fulfillRandomnessBatch(ids, proofs)`. Every served member runs exactly like `fulfillRandomness`: its own `BlockHashStored`, `RequestServed`, `ProofVerified`, `RandomnessFulfilled`, `FulfillmentEvidence`, `CallbackAttempted` and `KeeperFeePaid` events, settlement from its own `feePaid` and its own callback. Members already fulfilled, refunded or past their deadline are left untouched and marked with `FulfillmentSkipped(requestId, reason)` (1 fulfilled, 2 refunded, 3 past deadline); a wrong seed, invalid proof or unready member reverts the whole batch. Consumers see no difference. Indexers and verifiers must read per-request events and the request's stored state, not transaction calldata: only a single `fulfillRandomness` call is 452 bytes.
+The keeper may fulfill up to 16 prepared requests in one transaction with `fulfillRandomnessBatch(ids, proofs)`. Every served member runs exactly like `fulfillRandomness`: its own `BlockHashStored` (unless `storeBlockHash` stored the hash earlier), `RequestServed`, `ProofVerified`, `RandomnessFulfilled`, `FulfillmentEvidence`, `CallbackAttempted` and `KeeperFeePaid` (when the keeper share is non-zero) events, settlement from its own `feePaid` and its own callback. Members already fulfilled, refunded or past their deadline are left untouched and marked with `FulfillmentSkipped(requestId, reason)` (1 fulfilled, 2 refunded, 3 past deadline); a wrong seed, invalid proof or unready member reverts the whole batch. Consumers see no difference. Indexers and verifiers must read per-request events and the request's stored state, not transaction calldata: only a single `fulfillRandomness` call is 452 bytes.
 
 ## Optional refund notification
 
@@ -317,7 +338,7 @@ Use independently trusted successful receipts and state. Decode the registry `Ep
 
 `EpochProtocolConfiguration` is the initialized configuration: `feeRecipient` from `initialFeeRecipient()`, `initialMinFee` from `initialMinFee()` (the `initialize` fee argument), `catalogHash` from `catalogHash()`. Live `pricing()`, `feeRecipient()` and scheduled catalogs never change `protocolConfigurationHash`.
 
-Signer catalogs are per epoch. The registry owner can schedule a replacement catalog with `scheduleCatalog(signers, fromEpoch)` for epochs at least two ahead (event `CatalogScheduled(fromEpoch, catalogHash, signers)`); the current and next epoch, prepared snapshots and open requests keep their signers. `catalogHashAt(epochId)` and `signersAt(epochId)` return the catalog in force for an epoch, and `Epoch.catalogHash` records it at commitment. For replay, `epoch.catalog.signers` must be that per-epoch catalog, taken from `signersAt` or the `CatalogScheduled` history, while `configuration.catalogHash` stays the initial catalog bound into the configuration hash; `replayEpochCommitment` binds the supplied signers to `record.catalogHash`. `catalogHash()` and the slot getters always return the initial catalog.
+Signer catalogs are per epoch. The registry owner can schedule a replacement catalog with `scheduleCatalog(signers, fromEpoch)` for epochs at least two ahead (event `CatalogScheduled(fromEpoch, catalogHash, signers)`). A new schedule replaces a version that has not taken effect yet, which can return the next epoch to the previous catalog; the current epoch, prepared snapshots and open requests keep their signers. `catalogHashAt(epochId)` and `signersAt(epochId)` return the catalog in force for an epoch, and `Epoch.catalogHash` records it at commitment. For replay, `epoch.catalog.signers` must be that per-epoch catalog, taken from `signersAt` or the `CatalogScheduled` history without replaced versions, while `configuration.catalogHash` stays the initial catalog bound into the configuration hash; `replayEpochCommitment` binds the supplied signers to `record.catalogHash`. `catalogHash()` and the slot getters always return the initial catalog.
 
 At publication a signed attestation may be at most 240 seconds old and never future-dated (`MAX_ATTESTATION_AGE`, exported from `/epoch`); `replayEpochCommitment` enforces the same bound against the commit timestamp.
 
@@ -335,7 +356,7 @@ D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies wi
 
 ## Use locally
 
-For SDK development, run `npm ci` and `npm test` from this repository. The test builds, packs and installs a real tarball in an isolated consumer, replays the recipe fixtures, type-checks a strict consumer, exercises `quoteRequestFee` against a mock provider and compiles the Solidity sources. `npm pack` also produces an installable local artifact.
+For SDK development, run `npm ci` and `npm test` from this repository. The test builds, checks that `API.md` matches the reference that `scripts/api-reference.mjs` generates from the built ABIs and the curated `scripts/api-descriptions.mjs` (regenerate with `npm run build && npm run api-reference`), packs and installs a real tarball in an isolated consumer, replays the recipe fixtures, type-checks a strict consumer, exercises `quoteRequestFee` against a mock provider and compiles the Solidity sources. `npm pack` also produces an installable local artifact.
 
 ```js
 import { builtins, mapRandomness, replayCoordinator, quoteRequestFee } from '@d20dao/vrf-sdk';
@@ -344,7 +365,7 @@ const mapping = builtins.d20();
 // Use only an independently verified accepted word for real outcomes.
 ```
 
-The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers and `MAX_ATTESTATION_AGE`. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`. The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
+The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers and `MAX_ATTESTATION_AGE`. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`, both described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
 
 ## Operational and release boundary
 

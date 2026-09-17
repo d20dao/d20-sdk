@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.4`.
+Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.4.0`.
 
 ## Getting started
 
@@ -8,7 +8,7 @@ Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consu
 npm install @d20dao/vrf-sdk
 ```
 
-Use `@d20dao/vrf-sdk` 0.3.4 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
+Use `@d20dao/vrf-sdk` 0.4.0 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
 
 For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). The website guides are on d20dao.org: [guides](https://d20dao.org/docs) including [Getting started](https://d20dao.org/docs/getting-started) with its Copy prompt action, the guide index [d20dao.org/llms.txt](https://d20dao.org/llms.txt), the full text [d20dao.org/llms-full.txt](https://d20dao.org/llms-full.txt) and [d20dao.org/agents.md](https://d20dao.org/agents.md).
 
@@ -294,7 +294,7 @@ for (;;) {
 
 ## Request lifecycle
 
-Epochs last 200 blocks. The keeper selects one of four fixed recipes using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next source slot in a fixed order can be committed instead, one slot per 20-block window (at most three fallbacks); a saved response is never refreshed or resampled. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
+Epochs last 200 blocks. Each epoch uses a catalog of 1 to 10 fixed source recipes with their signers; the keeper selects one source using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next slot of the catalog can be committed instead, one slot per 20-block window (up to the catalog size minus one fallbacks); a saved response is never refreshed or resampled. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
 
 A request escrows its quoted fee even when its epoch packet is not published yet, and fixes its original block, epoch, client seed, mapping, refund address, `feePaid`, `refundBps` and 60-second deadline. The keeper publishes the saved packet only for live paid demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication; before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
@@ -332,13 +332,26 @@ The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook canno
 
 ## Replay and verification
 
-Use independently trusted successful receipts and state. Decode the registry `EpochCommitted` packet with `decodeEpochEvidencePacket` and verify with `replayEpochCommitment`, using the original source anchor, exact packet, commit block/time, ordered signers and registry identity. Decode the coordinator `FulfillmentEvidence` packet with `decodeEvidencePacket`, then call `replayCoordinator` with its exported input type (`Parameters<typeof replayCoordinator>[0]`).
+Use independently trusted successful receipts and state. Decode the registry `EpochCommitted` packet with `decodeEpochEvidencePacket` and verify with `replayEpochCommitment`, using the original source anchor, exact packet, commit block/time, the epoch's catalog (recipes and signers in slot order) and registry identity. Decode the coordinator `FulfillmentEvidence` packet with `decodeEvidencePacket`, then call `replayCoordinator` with its exported input type (`Parameters<typeof replayCoordinator>[0]`).
 
 `RequestContext` binds both `requestBlock` and `targetBlock`. Validate the epoch from the original request block, reconstruct the target from the actual publication block, and compare the event and stored transcript. Proof evidence is 416 bytes; fulfillment calldata is 452 bytes. Neither evidence packet has a version prefix. Choose the decoder from trusted emitter/event context. Decoding and mapping alone are not proof verification; replay does not authenticate RPC or establish receipt inclusion.
 
 `EpochProtocolConfiguration` is the initialized configuration: `feeRecipient` from `initialFeeRecipient()`, `initialMinFee` from `initialMinFee()` (the `initialize` fee argument), `catalogHash` from `catalogHash()`. Live `pricing()`, `feeRecipient()` and scheduled catalogs never change `protocolConfigurationHash`.
 
-Signer catalogs are per epoch. The registry owner can schedule a replacement catalog with `scheduleCatalog(signers, fromEpoch)` for epochs at least two ahead (event `CatalogScheduled(fromEpoch, catalogHash, signers)`). A new schedule replaces a version that has not taken effect yet, which can return the next epoch to the previous catalog; the current epoch, prepared snapshots and open requests keep their signers. `catalogHashAt(epochId)` and `signersAt(epochId)` return the catalog in force for an epoch, and `Epoch.catalogHash` records it at commitment. For replay, `epoch.catalog.signers` must be that per-epoch catalog, taken from `signersAt` or the `CatalogScheduled` history without replaced versions, while `configuration.catalogHash` stays the initial catalog bound into the configuration hash; `replayEpochCommitment` binds the supplied signers to `record.catalogHash`. `catalogHash()` and the slot getters always return the initial catalog.
+Source catalogs are per epoch. Recipes have global ids fixed in the registry implementation (`recipeRequest(id)` returns each canonical request; `EPOCH_RECIPES` in `/epoch` holds the same bodies with their provider):
+
+| Recipe | Provider | Signed record |
+| --- | --- | --- |
+| 0 | Hyperliquid | BTC daily notional volume |
+| 1 | dRPC | Ethereum mainnet block hash (Multicall3 `getLastBlockHash()`) |
+| 2 | TickerLayer | BTCUSD last trade |
+| 3 | TickerLayer | ETHUSD last trade |
+| 4 | Nodary | ETH/USD feed |
+| 5 | Hyperliquid | SOL mid price |
+| 6 | dRPC | Base block hash |
+| 7 | Nodary | BTC/USD feed |
+
+A registry starts with its initial catalog, recipes 0 to 3 with the four initialized signers (`catalogHash()` and the slot getters `hyperliquidSigner`, `ethereumBlockSigner`, `btcTradeSigner`, `ethTradeSigner`). The owner schedules a replacement with `scheduleCatalog(recipes, signers, fromEpoch)` for epochs at least two ahead (event `CatalogScheduled(fromEpoch, catalogHash, recipes, signers)`): 1 to 10 distinct recipe ids with one signer each. A new schedule replaces a version that has not taken effect yet, which can return the next epoch to the previous catalog; the current epoch, prepared snapshots and open requests keep their catalog. `catalogAt(epochId)` returns the hash, recipe ids and signers in force for an epoch, `sourceCountAt(epochId)` its size, and `Epoch.catalogHash` records the hash at commitment. For replay, build `epoch.catalog` with `resolveEpochCatalog(base, catalogAt view)`: the initial catalog has no `recipes` field, a scheduled one lists them. `replayEpochCommitment` binds the catalog to `record.catalogHash`, while `configuration.catalogHash` stays the initial catalog bound into the configuration hash. A registry implementation without `catalogAt` (before the upgrade that added catalogs) used its initial catalog for every epoch.
 
 At publication a signed attestation may be at most 240 seconds old and never future-dated (`MAX_ATTESTATION_AGE`, exported from `/epoch`); `replayEpochCommitment` enforces the same bound against the commit timestamp.
 
@@ -349,7 +362,7 @@ The contracts have not had an external security audit. The coordinator source ca
 Trust model:
 
 - **Owner.** On Arc Mainnet both service proxies are owned by the DAO treasury Safe `0xB57f656149749eff6b496dF090336491f977E744`, which is also the fee recipient; each manifest records the owner for its network. The owner can upgrade either implementation, which can change any behavior. Ownership moves only through a two-step transfer, and `renounceOwnership` reverts.
-- **Owner settings without an upgrade.** Coordinator: fee recipient, keeper share (0–100%), pricing within the bounds in [Pricing](#pricing), and the refund ratio for future requests (50–100%). Registry: committer and signer catalogs for epochs at least two ahead. Open requests keep their escrowed fee and refund ratio.
+- **Owner settings without an upgrade.** Coordinator: fee recipient, keeper share (0–100%), pricing within the bounds in [Pricing](#pricing), and the refund ratio for future requests (50–100%). Registry: committer and source catalogs for epochs at least two ahead. Open requests keep their escrowed fee and refund ratio.
 - **Keeper.** The VRF key holder can withhold a proof but cannot substitute a different result for a request's fixed seed. A request that is not served within 60 seconds is refundable at its snapshotted ratio.
 
 D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers; `renounceOwnership` reverts on both, so upgrade authority can only move through an accepted transfer. The registry owner can change the committer and schedule future catalogs; the coordinator owner can change fee recipient, keeper share, bounded pricing and the refund ratio. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Verify the implementation history of BOTH proxies at the relevant receipts; stable proxy addresses alone do not identify executed code. In practice, check it when you integrate and again whenever the deployment manifest records an upgrade or a proxy emits `Upgraded(implementation)`; a mismatch with the manifest means you should stop and review before sending more requests. Operators pin the proxy code, initialized configuration and both implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change.
@@ -365,7 +378,7 @@ const mapping = builtins.d20();
 // Use only an independently verified accepted word for real outcomes.
 ```
 
-The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers and `MAX_ATTESTATION_AGE`. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`, both described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
+The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers, the recipe table `EPOCH_RECIPES`, `resolveEpochCatalog` and `MAX_ATTESTATION_AGE`. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`, both described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
 
 ## Operational and release boundary
 

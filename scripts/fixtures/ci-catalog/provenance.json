@@ -1,0 +1,88 @@
+{
+  "sourceMode": "explicit CI fixture",
+  "canonicalProtocolCommit": "8a1c53d57e1447fb0d38620290823a9c5ad77c77",
+  "traceSha256": "ed2949048df58f93521c7f6386c2a1a6165bc7d0f0c08fa32fe243c653cfdbc7",
+  "note": "Explicit CI signatures, real Rust VRF proofs and local UUPS acceptance from the keeper demo with DEMO_ALL_SOURCES: epoch 1 uses the initial four-recipe catalog, later epochs the scheduled eight-recipe catalog [0,1,2,4,5,6,3,7]. Not live API3; the recipes' real signed responses are verified in the keeper repository tests.",
+  "fixtures": {
+    "epoch-replay-1.json": {
+      "requestId": "1",
+      "epochId": "1",
+      "catalog": "initial",
+      "source": 0,
+      "recipe": 0,
+      "fulfillmentTransactionHash": "0x32f9da743440e2c20e527aea3ec2f928b01b69a2953ddb445bdf691d98fdd0bb"
+    },
+    "epoch-replay-3.json": {
+      "requestId": "3",
+      "epochId": "1",
+      "catalog": "initial",
+      "source": 0,
+      "recipe": 0,
+      "fulfillmentTransactionHash": "0x440c16ba9a04115efcce7039b1141e12d78a3edeb1708ef51a0111bba81f2e7c"
+    },
+    "epoch-replay-4.json": {
+      "requestId": "4",
+      "epochId": "2",
+      "catalog": "scheduled",
+      "source": 2,
+      "recipe": 2,
+      "fulfillmentTransactionHash": "0x4f1f31772b12b66318bedc060fc36ce0a455a29de365b027c571117089ae4a19"
+    },
+    "epoch-replay-5.json": {
+      "requestId": "5",
+      "epochId": "3",
+      "catalog": "scheduled",
+      "source": 6,
+      "recipe": 3,
+      "fulfillmentTransactionHash": "0x189492605d5896d9a82c74a641b90db71c41da7191f8a8a886692ee57034559c"
+    },
+    "epoch-replay-6.json": {
+      "requestId": "6",
+      "epochId": "4",
+      "catalog": "scheduled",
+      "source": 5,
+      "recipe": 6,
+      "fulfillmentTransactionHash": "0x4170eb6963a4052e4bb7ab5446bc2ed30763ff71aace060ef659dd5bc12b0801"
+    },
+    "epoch-replay-8.json": {
+      "requestId": "8",
+      "epochId": "6",
+      "catalog": "scheduled",
+      "source": 4,
+      "recipe": 5,
+      "fulfillmentTransactionHash": "0xa26f3c54c56a741ea5d289f935b87ab3afc218161de64dba114165306e3ca4e6"
+    },
+    "epoch-replay-9.json": {
+      "requestId": "9",
+      "epochId": "7",
+      "catalog": "scheduled",
+      "source": 1,
+      "recipe": 1,
+      "fulfillmentTransactionHash": "0x2ae8f93dbb126000f2ae00431f48de6187faf848bce1b3cf55a6bde8d13ca220"
+    },
+    "epoch-replay-11.json": {
+      "requestId": "11",
+      "epochId": "9",
+      "catalog": "scheduled",
+      "source": 7,
+      "recipe": 7,
+      "fulfillmentTransactionHash": "0x3e51ed847480627c75a3afd19c59e0a9ae14df58fb0c145ca06622adee6dd315"
+    },
+    "epoch-replay-14.json": {
+      "requestId": "14",
+      "epochId": "12",
+      "catalog": "scheduled",
+      "source": 0,
+      "recipe": 0,
+      "fulfillmentTransactionHash": "0xa68dd44cdae0f0f962974c4f90ebcaae6c37e8f3edb46e92384fd54fa0b4a70f"
+    },
+    "epoch-replay-32.json": {
+      "requestId": "32",
+      "epochId": "30",
+      "catalog": "scheduled",
+      "source": 3,
+      "recipe": 4,
+      "fulfillmentTransactionHash": "0x01fe3d11d2c35ab50eabfb9d411cba9cedc671939d1845f78cf532a3e348993a"
+    }
+  }
+}

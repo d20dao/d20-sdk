@@ -53,7 +53,7 @@ copyFileSync(resolve(pkg, 'scripts/consumer-smoke.mjs'), resolve(temp, 'smoke.mj
 writeFileSync(resolve(temp, 'typecheck.ts'), `
 import { builtins, mapRandomness, replayCoordinator, decodeEvidencePacket, quoteRequestFee, DEFAULT_FEE_BUFFER_BPS, type RequestContext, type EpochProtocolConfiguration, type FeeQuote, type FeeQuoteProvider } from '@d20dao/vrf-sdk';
 import { coordinatorAbi, epochEntropyAbi } from '@d20dao/vrf-sdk/abi';
-import { replayEpochCommitment, MAX_ATTESTATION_AGE, type EpochCatalog, type EpochSigners } from '@d20dao/vrf-sdk/epoch';
+import { replayEpochCommitment, resolveEpochCatalog, EPOCH_RECIPES, MAX_ATTESTATION_AGE, type EpochCatalog, type EpochRecipe, type EpochSigners } from '@d20dao/vrf-sdk/epoch';
 import { Interface, Contract, JsonRpcProvider } from 'ethers';
 const signers: EpochSigners = ['0x0000000000000000000000000000000000000001','0x0000000000000000000000000000000000000002','0x0000000000000000000000000000000000000003','0x0000000000000000000000000000000000000003'];
 type ReplayInput = Parameters<typeof replayCoordinator>[0];
@@ -65,7 +65,10 @@ const registry = new Interface(epochEntropyAbi);
 const provider: FeeQuoteProvider = new JsonRpcProvider('http://127.0.0.1:8545');
 const quote: Promise<FeeQuote> = quoteRequestFee(provider, '0x0000000000000000000000000000000000000001', 100_000, { bufferBps: DEFAULT_FEE_BUFFER_BPS });
 const age: bigint = MAX_ATTESTATION_AGE;
-console.log(values, coordinator, registry, quote, age);
+const scheduled: EpochCatalog = { signers: [signers[0], signers[1]], recipes: [4, 7], registry: '0x0000000000000000000000000000000000000004', chainId: 5042n, firstEpochStart: 1n };
+const recipe: EpochRecipe = EPOCH_RECIPES[0];
+const resolved: EpochCatalog = resolveEpochCatalog(scheduled, { hash: '0x' + '00'.repeat(32), recipes: [4n, 7n], signers: scheduled.signers });
+console.log(values, coordinator, registry, quote, age, recipe, resolved, replayEpochCommitment);
 `);
 writeFileSync(resolve(temp, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, noEmit: true, skipLibCheck: false, types: [] }, files: ['typecheck.ts'] }));
 execFileSync(process.execPath, [resolve(temp, 'node_modules/typescript/bin/tsc'), '-p', resolve(temp, 'tsconfig.json')], { cwd: temp, stdio: 'inherit' });

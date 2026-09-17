@@ -26,9 +26,12 @@ assert(iface.getEvent('RandomnessRequested').inputs.some(p => p.name === 'feePai
 assert.deepEqual(iface.getEvent('FulfillmentSkipped').inputs.map(p => p.type), ['uint256','uint8']);
 assert.deepEqual(iface.getError('IncorrectFee').inputs.map(p => p.type), ['uint256','uint256']);
 for (const name of ['FeeOverflow','InvalidBatch','NoRefundCredit']) assert(iface.getError(name), name);
-for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpochFallbackSelection','fallbackOpensAt','getEpoch','commitEpoch','commitEpochFallback','scheduleCatalog','catalogHashAt','signersAt','catalogHash','MAX_ATTESTATION_AGE']) assert(registry.getFunction(name), name);
-assert.deepEqual(registry.getFunction('scheduleCatalog').inputs.map(p => p.type), ['address[4]','uint64']);
-assert.deepEqual(registry.getFunction('signersAt').outputs.map(p => p.type), ['address[4]']);
+for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpochFallbackSelection','fallbackOpensAt','getEpoch','commitEpoch','commitEpochFallback','scheduleCatalog','catalogAt','sourceCountAt','recipeRequest','catalogHash','ethereumBlockSigner','MAX_ATTESTATION_AGE','MAX_SOURCES','RECIPE_COUNT']) assert(registry.getFunction(name), name);
+for (const name of ['catalogHashAt','signersAt','anuSigner','MAX_FALLBACK_ATTEMPT']) assert(!registry.hasFunction(name), name);
+assert.deepEqual(registry.getFunction('scheduleCatalog').inputs.map(p => p.type), ['uint8[]','address[]','uint64']);
+assert.deepEqual(registry.getFunction('catalogAt').outputs.map(p => p.type), ['bytes32','uint8[]','address[]']);
+assert.deepEqual(registry.getFunction('getEpochSelection').outputs[0].components.map(p => p.name), ['source','recipe','airnode','selector','queryHash','canonicalRequest']);
+assert.deepEqual(registry.getEvent('CatalogScheduled').inputs.map(p => p.type), ['uint64','bytes32','uint8[]','address[]']);
 for (const name of ['EpochCommitted','CatalogScheduled']) assert(registry.getEvent(name), name);
 for (const abi of [iface,registry]) { assert(abi.getFunction('renounceOwnership')); assert(abi.getError('RenounceDisabled')); }
 assert.equal(epoch.MAX_ATTESTATION_AGE, 240n);
@@ -42,8 +45,13 @@ assert(['live API3','explicit CI fixture'].includes(fixtureProvenance.sourceMode
 const fixtures = JSON.parse(readFileSync('fixture-names.json','utf8')).map(name => JSON.parse(readFileSync(name,'utf8'), (_key,value) => typeof value === 'string' && /^[0-9]+$/.test(value) ? BigInt(value) : value));
 const fixture = fixtures[0];
 const canonicalProof = proof => ({...proof,uWitness:getAddress(proof.uWitness)});
-const coveredSources = [...new Set(fixtures.map(f => Number(f.epoch.record.source)))].sort();
-assert.deepEqual(coveredSources,[0,1,2,3], 'Current fixture coverage must include all four recipe slots');
+// The recipe of a fixture is its catalog's recipe at the committed slot; the initial catalog has no recipes field and uses recipes 0-3.
+const recipeOf = f => Number(f.epoch.catalog.recipes ? f.epoch.catalog.recipes[Number(f.epoch.record.source)] : f.epoch.record.source);
+const coveredSources = [...new Set(fixtures.map(recipeOf))].sort((a,b) => a-b);
+assert.deepEqual(coveredSources, epoch.EPOCH_RECIPES.map(r => r.id), 'Current fixture coverage must include every recipe');
+assert(fixtures.some(f => !f.epoch.catalog.recipes) && fixtures.some(f => f.epoch.catalog.recipes), 'Fixtures must replay both the initial and a scheduled catalog');
+assert.deepEqual(epoch.EPOCH_RECIPES.map(r => r.provider), ['hyperliquid','drpc','tickerlayer','tickerlayer','nodary','hyperliquid','drpc','nodary']);
+assert.equal(epoch.EPOCH_CANONICAL_REQUESTS[1], '["jsonRpc",[["method","eth_call"],["network","ethereum"],["params",[[["data","0x27e86d6e"],["to","0xcA11bde05977b3631167028862bE2a173976CA11"]],"latest"]]]]');
 assert.equal(registry.deploy.inputs.length,0);
 assert.equal(iface.deploy.inputs.length,0);
 assert.equal(registry.getFunction('initialize').inputs[0].type,'address[4]');
@@ -52,7 +60,10 @@ assert(iface.getFunction('initialFeeRecipient'));
 assert(requestOutputs.includes('requestBlock') && requestOutputs.includes('targetBlock'));
 assert(fixtures.some(f => epoch.epochForBlock(f.configuration.firstEpochStart,f.acceptanceBlock) > f.context.epochId), 'Fixture set must replay a request accepted across an epoch boundary');
 for (const f of fixtures) {
- assert.equal(f.epoch.catalog.signers.length,4);
+ assert.equal(f.epoch.catalog.signers.length, f.epoch.catalog.recipes ? f.epoch.catalog.recipes.length : 4);
+ const [hash] = [epoch.epochCatalogHash(f.epoch.catalog.signers, f.epoch.catalog.recipes)];
+ assert.equal(hash, f.epoch.record.catalogHash);
+ assert.deepEqual(epoch.resolveEpochCatalog(f.epoch.catalog, {hash, recipes: f.epoch.catalog.recipes ?? epoch.INITIAL_EPOCH_RECIPES, signers: f.epoch.catalog.signers}), f.epoch.catalog);
  assert.equal(typeof f.configuration.initialMinFee, 'bigint');
  assert(!('requestFee' in f.configuration), 'Fixtures carry the initialize() fee as initialMinFee');
  const evidence = epoch.decodeEpochEvidencePacket(f.epoch.packet);
@@ -61,7 +72,7 @@ for (const f of fixtures) {
  const commitment = {...f.epoch, epochId: f.context.epochId};
  assert.equal(epoch.replayEpochCommitment({...commitment, commitTimestamp: evidence.attestation.timestamp + 240n}).epochHash, f.context.epochHash);
  assert.throws(() => epoch.replayEpochCommitment({...commitment, commitTimestamp: evidence.attestation.timestamp + 241n}), /attestation time/);
- assert.throws(() => epoch.replayEpochCommitment({...commitment, catalog: {...f.epoch.catalog, signers: [...f.epoch.catalog.signers.slice(0,3), f.epoch.catalog.signers[0]]}}));
+ assert.throws(() => epoch.replayEpochCommitment({...commitment, catalog: {...f.epoch.catalog, signers: [f.epoch.catalog.signers[1], f.epoch.catalog.signers[0], ...f.epoch.catalog.signers.slice(2)]}}));
  const replayed = sdk.replayCoordinator(f);
  assert.equal(replayed.reveal.randomness,f.recorded.randomness);
  assert.equal(sdk.deriveRequestSeed(f.context),f.vrfProof.seed);
@@ -94,7 +105,7 @@ assert.equal(epoch.epochForBlock(300n,299n),0n);
 assert.equal(epoch.epochForBlock(300n,300n),1n);
 assert.equal(epoch.epochForBlock(300n,499n),1n);
 assert.equal(epoch.epochForBlock(300n,500n),2n);
-assert([0,1,2,3].includes(Number(fixture.epoch.record.source)));
+assert(Number(fixture.epoch.record.source) < (fixture.epoch.catalog.recipes?.length ?? 4));
 const mapped = sdk.mapRandomness(result.reveal.randomness,sdk.builtins.d20());
 assert(mapped.length===1 && mapped[0]>=1n && mapped[0]<=20n);
 const bundle = await build({stdin:{contents:"export * from '@d20dao/vrf-sdk'; export * from '@d20dao/vrf-sdk/abi';",resolveDir:process.cwd(),sourcefile:'public-entry.js'},bundle:true,platform:'browser',format:'esm',target:'es2022',write:false,metafile:true});

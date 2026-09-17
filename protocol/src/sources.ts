@@ -3,6 +3,8 @@ export interface ApiRequest { operation: string; parameters: Record<string, unkn
 export interface ApiAttestation { timestamp: bigint; data: string; signature: string; }
 const abi = AbiCoder.defaultAbiCoder();
 
+// AirnodeHub request canonicalization: every object, at any depth, becomes its [key, value] entries sorted by key,
+// and arrays keep their order. The request hash is keccak256 of the UTF-8 JSON of [operation, parameters(, projection)].
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value !== null && typeof value === "object")

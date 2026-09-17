@@ -6,7 +6,8 @@ export {canonicalApiRequest,attestationDigest,hashAttestation,validateApiSignatu
 export type {ApiRequest,ApiAttestation} from "./sources.ts";
 export {replayCoordinator,transcriptHash} from "./replay.ts";
 export {encodeEvidencePacket,decodeEvidencePacket,EVIDENCE_PACKET_BYTES} from "./evidence.ts";
-export {EPOCH_LENGTH,EPOCH_RECIPE_DOMAIN,epochCatalogHash,epochStart,epochForBlock,selectEpoch,
-  verifyEpochAttestation,epochCommitmentHash,encodeEpochEvidencePacket,decodeEpochEvidencePacket,
+export {EPOCH_LENGTH,EPOCH_RECIPE_DOMAIN,EPOCH_RECIPES,EPOCH_CANONICAL_REQUESTS,INITIAL_EPOCH_RECIPES,MAX_EPOCH_SOURCES,FALLBACK_DELAY_BLOCKS,
+  epochCatalogHash,epochCatalogRecipes,resolveEpochCatalog,epochStart,epochForBlock,fallbackOpensAt,selectEpoch,
+  validateEpochData,verifyEpochAttestation,epochCommitmentHash,encodeEpochEvidencePacket,decodeEpochEvidencePacket,
   replayEpochCommitment,epochProtocolConfigurationHash} from "./epoch.ts";
-export type {EpochCatalog,EpochSigners,EpochRecord,EpochProtocolConfiguration} from "./epoch.ts";
+export type {EpochCatalog,EpochSigners,EpochRecord,EpochRecipe,EpochProvider,EpochProtocolConfiguration} from "./epoch.ts";

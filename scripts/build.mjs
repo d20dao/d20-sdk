@@ -31,7 +31,7 @@ for (const name of ['.generated', 'dist', 'abi', 'contracts', 'notices']) {
   if (dirname(target) !== pkg) throw new Error('Unsafe generated output path');
   rmSync(target, { recursive: true, force: true });
 }
-const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'epoch'];
+const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'templates', 'epoch'];
 const sdkModules = ['fees'];
 const toEsm = source => source.replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.js$2');
 // The public root entry is the protocol index plus these SDK-owned exports appended verbatim.

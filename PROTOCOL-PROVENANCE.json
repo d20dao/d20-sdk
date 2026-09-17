@@ -1,6 +1,6 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "640b60cb992a7e3add1efe8e7b392341732ea004",
+  "sourceCommit": "5cb939a27983e037bc4173dbaa2f021bd223dfbc",
   "note": "Current public d20dao protocol copied byte-for-byte from committed Git blobs. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
@@ -14,13 +14,15 @@
     "contracts/vendor/PROVENANCE.md": "e6da392378851c47574ef808c9c7e17dea50054ffd0cae7a9070f76f8eed60f2",
     "contracts/vendor/VRF.sol": "98e0345fd2dd42178cad4ad16dd8b18621112078d63d0c64839c8bd01c539350",
     "src/evidence.ts": "81b6a1446b9700ec545e794b08d356411608aa655e6030cdfabd1dfa531ef457",
-    "src/index.ts": "6c23d8e952dfe4b7cd08cbd36f2e4bf6f434ebfc408c602038bc678b2ba4e174",
+    "src/index.ts": "0a791dc1d12d8f02e503f4990b057f89838f16f93bbdafc4fb3effa6917daf80",
     "src/mapping.ts": "76aa6093d55831052b56e177fc394ef6ef14183a8ab8ca6fcc2c9382efb6b83f",
     "src/replay.ts": "c97a5081e785e6a7f27987e2d4c4d9861fe8fa8cbc775b0152e337141d3d48d7",
-    "src/sources.ts": "d8566e7809c67dc51acab3b58fc93d734d098c2eabbaf3657ac910affe12e31e",
+    "src/sources.ts": "8e8b50adf76f4b17d3936ffa4bb4d13e3891f6c7c40483cc9854fc28d0e88a1d",
     "src/verification.ts": "754e39554c0c432cf1404741503f66b4199b84f39003d8e42f300a7256ffaa6a",
-    "src/epoch.ts": "41a3d60f063deccc6d19761dc63702a2fdd1efdc46f775b7202241c3eb4d1334",
-    "contracts/EpochEntropy.sol": "bdd4f9e5dab6626572a72a0c15e73b4f3f19c6933b7a122fad237a9784fa3cbb",
-    "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286"
+    "src/epoch.ts": "91bb0d818315dfb5841e1a0450c4b8839d6992ae7d573b33bda1f8797f071aa0",
+    "contracts/EpochEntropy.sol": "c2064f04924f27dedccd261b5ac77359569008c1a1013fb7e8f9f66908ee2c77",
+    "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286",
+    "contracts/libraries/DataTemplate.sol": "f0d93c2ec3bcb8cfb625001506fe24f938e6e2cfbae85632f2980d23595ed961",
+    "src/templates.ts": "7f74968e746461e168a863769736399d74bdab29041ab8dd1cdc0d197b927e61"
   }
 }

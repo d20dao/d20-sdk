@@ -26,10 +26,19 @@ assert(iface.getEvent('RandomnessRequested').inputs.some(p => p.name === 'feePai
 assert.deepEqual(iface.getEvent('FulfillmentSkipped').inputs.map(p => p.type), ['uint256','uint8']);
 assert.deepEqual(iface.getError('IncorrectFee').inputs.map(p => p.type), ['uint256','uint256']);
 for (const name of ['FeeOverflow','InvalidBatch','NoRefundCredit']) assert(iface.getError(name), name);
-for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpochFallbackSelection','fallbackOpensAt','getEpoch','commitEpoch','commitEpochFallback','scheduleCatalog','catalogHashAt','signersAt','catalogHash','MAX_ATTESTATION_AGE']) assert(registry.getFunction(name), name);
-assert.deepEqual(registry.getFunction('scheduleCatalog').inputs.map(p => p.type), ['address[4]','uint64']);
-assert.deepEqual(registry.getFunction('signersAt').outputs.map(p => p.type), ['address[4]']);
-for (const name of ['EpochCommitted','CatalogScheduled']) assert(registry.getEvent(name), name);
+for (const name of ['epochStart','epochForBlock','getEpochSelection','getEpochFallbackSelection','fallbackOpensAt','getEpoch','commitEpoch','commitEpochFallback','scheduleCatalog','catalogAt','sourceCountAt','catalogHash','MAX_ATTESTATION_AGE',
+ 'registerRecipe','recipeCount','getRecipe','recipeRequest','initializeRecipeRegistry','setBackupCommitter','isBackupCommitter','backupCommitterCount','committer',
+ 'MAX_SOURCES','MAX_RECIPES','MAX_REQUEST_BYTES','MAX_BODY_BYTES','MAX_DATA_BYTES','MAX_TEMPLATE_BYTES','MAX_BACKUP_COMMITTERS']) assert(registry.getFunction(name), name);
+// Catalogs name registered recipe ids with one signer each; the four-signer catalog views are gone.
+assert.deepEqual(registry.getFunction('scheduleCatalog').inputs.map(p => p.type), ['uint8[]','address[]','uint64']);
+assert.deepEqual(registry.getFunction('catalogAt').outputs.map(p => p.type), ['bytes32','uint8[]','address[]']);
+assert.deepEqual(registry.getFunction('getRecipe').outputs.map(p => p.type), ['bytes32','string','bytes','string']);
+assert.deepEqual(registry.getFunction('registerRecipe').inputs.map(p => p.type), ['string','bytes','string']);
+assert.deepEqual(registry.getFunction('getEpochSelection').outputs[0].components.map(p => p.name), ['source','recipe','airnode','selector','queryHash','canonicalRequest']);
+for (const name of ['signersAt','catalogHashAt','anuSigner']) assert(!registry.hasFunction(name), name);
+for (const name of ['EpochCommitted','CatalogScheduled','RecipeRegistered','BackupCommitterSet']) assert(registry.getEvent(name), name);
+assert.deepEqual(registry.getEvent('CatalogScheduled').inputs.map(p => p.type), ['uint64','bytes32','uint8[]','address[]']);
+for (const name of ['InvalidRecipe','InvalidTemplate','OnlyCommitter']) assert(registry.getError(name), name);
 for (const abi of [iface,registry]) { assert(abi.getFunction('renounceOwnership')); assert(abi.getError('RenounceDisabled')); }
 assert.equal(epoch.MAX_ATTESTATION_AGE, 240n);
 assert(iface.getEvent('FulfillmentEvidence'));
@@ -42,8 +51,12 @@ assert(['live API3','explicit CI fixture'].includes(fixtureProvenance.sourceMode
 const fixtures = JSON.parse(readFileSync('fixture-names.json','utf8')).map(name => JSON.parse(readFileSync(name,'utf8'), (_key,value) => typeof value === 'string' && /^[0-9]+$/.test(value) ? BigInt(value) : value));
 const fixture = fixtures[0];
 const canonicalProof = proof => ({...proof,uWitness:getAddress(proof.uWitness)});
-const coveredSources = [...new Set(fixtures.map(f => Number(f.epoch.record.source)))].sort();
-assert.deepEqual(coveredSources,[0,1,2,3], 'Current fixture coverage must include all four recipe slots');
+const recipeOf = f => (f.epoch.catalog.recipes ?? epoch.INITIAL_EPOCH_RECIPES)[Number(f.epoch.record.source)];
+const coveredRecipes = [...new Set(fixtures.map(recipeOf))].sort((a, b) => a - b);
+assert.deepEqual(coveredRecipes, [0,1,2,4,5], 'Current fixture coverage must include every rollout catalog recipe');
+assert(fixtures.some(f => f.epoch.catalog.recipes === undefined) && fixtures.some(f => f.epoch.catalog.recipes !== undefined), 'Fixtures must replay the initial and a scheduled catalog');
+assert.deepEqual(epoch.BUILTIN_EPOCH_RECIPES.map(r => r.id), [0,1,2,3,4,5]);
+assert.deepEqual(epoch.INITIAL_EPOCH_RECIPES, [0,1,2,3]);
 assert.equal(registry.deploy.inputs.length,0);
 assert.equal(iface.deploy.inputs.length,0);
 assert.equal(registry.getFunction('initialize').inputs[0].type,'address[4]');
@@ -52,7 +65,20 @@ assert(iface.getFunction('initialFeeRecipient'));
 assert(requestOutputs.includes('requestBlock') && requestOutputs.includes('targetBlock'));
 assert(fixtures.some(f => epoch.epochForBlock(f.configuration.firstEpochStart,f.acceptanceBlock) > f.context.epochId), 'Fixture set must replay a request accepted across an epoch boundary');
 for (const f of fixtures) {
- assert.equal(f.epoch.catalog.signers.length,4);
+ assert.equal(f.epoch.catalog.signers.length,(f.epoch.catalog.recipes ?? epoch.INITIAL_EPOCH_RECIPES).length);
+ // Built-in recipes replay without a recipe book; a registered definition from getRecipe gives the same result.
+ const builtinOnly = {...f, epoch: {...f.epoch, catalog: {...f.epoch.catalog, recipeBook: undefined}}};
+ assert.deepEqual(sdk.replayCoordinator(builtinOnly), sdk.replayCoordinator(f));
+ const book = f.epoch.catalog.recipeBook;
+ for (const [id, definition] of Object.entries(book)) assert.deepEqual({...definition}, {canonicalRequest: epoch.BUILTIN_EPOCH_RECIPES[id].canonicalRequest, template: epoch.BUILTIN_EPOCH_RECIPES[id].template, body: epoch.BUILTIN_EPOCH_RECIPES[id].body});
+ const recipe = recipeOf(f), selected = epoch.selectEpoch(f.epoch.catalog, f.context.epochId, f.epoch.record.anchorHash, 0);
+ assert.equal(selected.recipe, recipe);
+ // The recipe's data template decides which signed bytes the registry accepts: one changed byte is rejected.
+ const signed = epoch.decodeEpochEvidencePacket(f.epoch.packet).attestation.data;
+ assert(sdk.matchesDataTemplate(book[recipe].template, signed));
+ assert(!sdk.matchesDataTemplate(book[recipe].template, signed + '20'));
+ const otherTemplate = book[recipe === 0 ? 2 : 0].template; // a template of another record shape
+ assert.throws(() => sdk.replayCoordinator({...f, epoch: {...f.epoch, catalog: {...f.epoch.catalog, recipeBook: {...book, [recipe]: {...book[recipe], template: otherTemplate}}}}}), /Invalid exact epoch data/);
  assert.equal(typeof f.configuration.initialMinFee, 'bigint');
  assert(!('requestFee' in f.configuration), 'Fixtures carry the initialize() fee as initialMinFee');
  const evidence = epoch.decodeEpochEvidencePacket(f.epoch.packet);
@@ -94,7 +120,29 @@ assert.equal(epoch.epochForBlock(300n,299n),0n);
 assert.equal(epoch.epochForBlock(300n,300n),1n);
 assert.equal(epoch.epochForBlock(300n,499n),1n);
 assert.equal(epoch.epochForBlock(300n,500n),2n);
-assert([0,1,2,3].includes(Number(fixture.epoch.record.source)));
+assert(Number(fixture.epoch.record.source) < (fixture.epoch.catalog.recipes ?? epoch.INITIAL_EPOCH_RECIPES).length);
+// Data templates: the encoding round-trips and matching is exact.
+const tradeTemplate = sdk.encodeDataTemplate([{literal:'{"symbol":"BTCUSD","price":'},{decimal:{fraction:true,exponent:true}},{literal:',"size":'},{decimal:{fraction:true,exponent:true}},{literal:',"timestamp":'},{integer:{minDigits:1,maxDigits:16}},{literal:'}'}]);
+assert.equal(tradeTemplate, epoch.BUILTIN_EPOCH_RECIPES[2].template);
+assert.deepEqual(sdk.decodeDataTemplate(tradeTemplate)[1], {decimal:{fraction:true,exponent:true}});
+const utf8 = text => '0x' + Buffer.from(text).toString('hex');
+assert(sdk.matchesDataTemplate(tradeTemplate, utf8('{"symbol":"BTCUSD","price":117000.5,"size":0.01,"timestamp":1789503538000}')));
+assert(!sdk.matchesDataTemplate(tradeTemplate, utf8('{"symbol":"BTCUSD","price":0117000.5,"size":0.01,"timestamp":1789503538000}')));
+assert.throws(() => sdk.encodeDataTemplate([{literal:'only literals'}]));
+assert.equal(sdk.isValidDataTemplate('0x0101'), false);
+// Evidence recorded before the recipe registry used ANU in slot 1. It replays when its definition is supplied as
+// a registered recipe, and a recipe book cannot turn it into the built-in recipe 1.
+const anu = {canonicalRequest:'["randomNumbers",[["length",4],["size",8],["type","hex8"]]]',
+ template:sdk.encodeDataTemplate([{literal:'{"success":true,"type":"hex8","length":"4","data":["'},{hex:16},{literal:'","'},{hex:16},{literal:'","'},{hex:16},{literal:'","'},{hex:16},{literal:'"]}'}]),
+ body:'{"operation":"randomNumbers","parameters":{"type":"hex8","length":4,"size":8}}'};
+const legacyFixtures = JSON.parse(readFileSync('legacy-fixture-names.json','utf8')).map(name => JSON.parse(readFileSync(name,'utf8'), (_key,value) => typeof value === 'string' && /^[0-9]+$/.test(value) ? BigInt(value) : value));
+assert(legacyFixtures.some(f => Number(f.epoch.record.source) === 1), 'Legacy fixtures must include an ANU epoch');
+for (const f of legacyFixtures) {
+ const withAnu = {...f, epoch: {...f.epoch, catalog: {...f.epoch.catalog, recipeBook: {1: anu}}}};
+ assert.equal(sdk.replayCoordinator(withAnu).reveal.randomness, f.recorded.randomness);
+ if (Number(f.epoch.record.source) === 1) assert.throws(() => sdk.replayCoordinator(f), /Epoch recipe mismatch/);
+ else assert.equal(sdk.replayCoordinator(f).reveal.randomness, f.recorded.randomness);
+}
 const mapped = sdk.mapRandomness(result.reveal.randomness,sdk.builtins.d20());
 assert(mapped.length===1 && mapped[0]>=1n && mapped[0]<=20n);
 const bundle = await build({stdin:{contents:"export * from '@d20dao/vrf-sdk'; export * from '@d20dao/vrf-sdk/abi';",resolveDir:process.cwd(),sourcefile:'public-entry.js'},bundle:true,platform:'browser',format:'esm',target:'es2022',write:false,metafile:true});
@@ -150,5 +198,5 @@ consumer.forEachFunction(fragment=>{
  assert.equal(coordinator.selector,fragment.selector);assert.equal(coordinator.stateMutability,fragment.stateMutability);
  assert.deepEqual(coordinator.outputs.map(p=>p.format('sighash')),fragment.outputs.map(p=>p.format('sighash')));
 });
-console.log(fixtureProvenance.sourceMode+' recipe fixture coverage: '+coveredSources.join(', '));
+console.log(fixtureProvenance.sourceMode+' recipe fixture coverage: '+coveredRecipes.join(', ')+'; legacy ANU evidence: '+legacyFixtures.length+' fixtures');
 console.log('Current epoch/VRF replay, ABI, off-chain fee quoting, strict TypeScript, browser-target bundle ('+bundle.outputFiles[0].contents.length+' bytes) and Solidity checks passed.');

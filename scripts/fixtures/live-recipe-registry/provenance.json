@@ -1,0 +1,56 @@
+{
+  "sourceMode": "live API3",
+  "canonicalProtocolCommit": "5cb939a27983e037bc4173dbaa2f021bd223dfbc",
+  "traceSha256": "37708d4dd882b58e5bbfbf00a22c7e29c4647c51a94176a9aed82e0b4fe9f578",
+  "note": "Genuine live API3 signed responses from the Hyperliquid, dRPC, TickerLayer and Nodary gateways, real Rust VRF proofs and actual isolated local-proxy-chain acceptance, recorded 2026-09-17 with the keeper demo (DEMO_FIXTURE=false DEMO_ALL_SOURCES=true). Epoch 1 uses the initial catalog; the owner scheduled the rollout catalog [0,1,2,4,5] from epoch 2. Each catalog carries the recipe definitions read from the registry with getRecipe. Not a public-network deployment.",
+  "fixtures": {
+    "epoch-replay-1.json": {
+      "requestId": "1",
+      "epochId": "1",
+      "source": 0,
+      "recipe": 0,
+      "catalog": "initial [0,1,2,3]",
+      "fulfillmentTransactionHash": "0x28794eef6ea377dbbd8cefdca3aa8bd3560c0abdee116ba68fa449f77d0648de"
+    },
+    "epoch-replay-3.json": {
+      "requestId": "3",
+      "epochId": "1",
+      "source": 0,
+      "recipe": 0,
+      "catalog": "initial [0,1,2,3]",
+      "fulfillmentTransactionHash": "0x653616a962d226cf3a1e3c3251341de5ae818744f5fefc05097a78ed34f18298"
+    },
+    "epoch-replay-4.json": {
+      "requestId": "4",
+      "epochId": "2",
+      "source": 2,
+      "recipe": 2,
+      "catalog": "scheduled [0,1,2,4,5]",
+      "fulfillmentTransactionHash": "0x320176c93fca38dce2aa8680b95d0cf84662a601cfea1bc67fed89d9219dd49f"
+    },
+    "epoch-replay-6.json": {
+      "requestId": "6",
+      "epochId": "4",
+      "source": 3,
+      "recipe": 4,
+      "catalog": "scheduled [0,1,2,4,5]",
+      "fulfillmentTransactionHash": "0x7083436b6b2bacb0d3d01de6e9a6fced01d1e58016cf8208a389665be4fe72bd"
+    },
+    "epoch-replay-10.json": {
+      "requestId": "10",
+      "epochId": "8",
+      "source": 1,
+      "recipe": 1,
+      "catalog": "scheduled [0,1,2,4,5]",
+      "fulfillmentTransactionHash": "0xfd6cd44d88f6c1adcbe08a1dad8e565cadf8243afddc36e72f9f061af237bb1f"
+    },
+    "epoch-replay-14.json": {
+      "requestId": "14",
+      "epochId": "12",
+      "source": 4,
+      "recipe": 5,
+      "catalog": "scheduled [0,1,2,4,5]",
+      "fulfillmentTransactionHash": "0x0deceba457aa0b31d5780993ddb9135d6972ffba453e3636aee2129d64b1e956"
+    }
+  }
+}

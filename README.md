@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.4`.
+Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.4.0`.
 
 ## Getting started
 
@@ -8,7 +8,7 @@ Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consu
 npm install @d20dao/vrf-sdk
 ```
 
-Use `@d20dao/vrf-sdk` 0.3.4 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
+Use `@d20dao/vrf-sdk` 0.4.0 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
 
 For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). The website guides are on d20dao.org: [guides](https://d20dao.org/docs) including [Getting started](https://d20dao.org/docs/getting-started) with its Copy prompt action, the guide index [d20dao.org/llms.txt](https://d20dao.org/llms.txt), the full text [d20dao.org/llms-full.txt](https://d20dao.org/llms-full.txt) and [d20dao.org/agents.md](https://d20dao.org/agents.md).
 
@@ -294,7 +294,7 @@ for (;;) {
 
 ## Request lifecycle
 
-Epochs last 200 blocks. The keeper selects one of four fixed recipes using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next source slot in a fixed order can be committed instead, one slot per 20-block window (at most three fallbacks); a saved response is never refreshed or resampled. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
+Epochs last 200 blocks. Each epoch uses the catalog in force for it: 1 to 10 ordered sources, each a registered recipe with its signer (see [Recipes](#recipes)). The keeper selects a source using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next source in catalog order can be committed instead, one source per 20-block window (attempts 1 to count − 1); a saved response is never refreshed or resampled. The registry committer publishes, or a backup committer the owner allowed, such as a follower keeper on another host that takes over while the primary keeper is down; the keeper share always goes to the committer. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
 
 A request escrows its quoted fee even when its epoch packet is not published yet, and fixes its original block, epoch, client seed, mapping, refund address, `feePaid`, `refundBps` and 60-second deadline. The keeper publishes the saved packet only for live paid demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication; before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
@@ -332,15 +332,69 @@ The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook canno
 
 ## Replay and verification
 
-Use independently trusted successful receipts and state. Decode the registry `EpochCommitted` packet with `decodeEpochEvidencePacket` and verify with `replayEpochCommitment`, using the original source anchor, exact packet, commit block/time, ordered signers and registry identity. Decode the coordinator `FulfillmentEvidence` packet with `decodeEvidencePacket`, then call `replayCoordinator` with its exported input type (`Parameters<typeof replayCoordinator>[0]`).
+Use independently trusted successful receipts and state. Decode the registry `EpochCommitted` packet with `decodeEpochEvidencePacket` and verify with `replayEpochCommitment`, using the original source anchor, exact packet, commit block/time, the epoch's catalog with its recipe definitions and the registry identity. Decode the coordinator `FulfillmentEvidence` packet with `decodeEvidencePacket`, then call `replayCoordinator` with its exported input type (`Parameters<typeof replayCoordinator>[0]`).
 
 `RequestContext` binds both `requestBlock` and `targetBlock`. Validate the epoch from the original request block, reconstruct the target from the actual publication block, and compare the event and stored transcript. Proof evidence is 416 bytes; fulfillment calldata is 452 bytes. Neither evidence packet has a version prefix. Choose the decoder from trusted emitter/event context. Decoding and mapping alone are not proof verification; replay does not authenticate RPC or establish receipt inclusion.
 
 `EpochProtocolConfiguration` is the initialized configuration: `feeRecipient` from `initialFeeRecipient()`, `initialMinFee` from `initialMinFee()` (the `initialize` fee argument), `catalogHash` from `catalogHash()`. Live `pricing()`, `feeRecipient()` and scheduled catalogs never change `protocolConfigurationHash`.
 
-Signer catalogs are per epoch. The registry owner can schedule a replacement catalog with `scheduleCatalog(signers, fromEpoch)` for epochs at least two ahead (event `CatalogScheduled(fromEpoch, catalogHash, signers)`). A new schedule replaces a version that has not taken effect yet, which can return the next epoch to the previous catalog; the current epoch, prepared snapshots and open requests keep their signers. `catalogHashAt(epochId)` and `signersAt(epochId)` return the catalog in force for an epoch, and `Epoch.catalogHash` records it at commitment. For replay, `epoch.catalog.signers` must be that per-epoch catalog, taken from `signersAt` or the `CatalogScheduled` history without replaced versions, while `configuration.catalogHash` stays the initial catalog bound into the configuration hash; `replayEpochCommitment` binds the supplied signers to `record.catalogHash`. `catalogHash()` and the slot getters always return the initial catalog.
+Catalogs are per epoch. `catalogAt(epochId)` returns the hash, recipe ids and signers an epoch selects and commits with, and `Epoch.catalogHash` records that hash at publication. A registry starts with its initial catalog, recipes 0 to 3 with the four signers given at initialization, whose hash `catalogHash()` is bound into the configuration hash; `catalogHash()` and the initial signer getters never change. The owner replaces the catalog for epochs at least two ahead with `scheduleCatalog(recipes, signers, fromEpoch)`: 1 to 10 distinct registered recipes with one signer each, hashed as `keccak256(abi.encode(RECIPE_DOMAIN, recipes, signers))` (event `CatalogScheduled(fromEpoch, catalogHash, recipes, signers)`). A new schedule replaces a version that has not taken effect yet, which can return the next epoch to the previous catalog; the current epoch, prepared snapshots and open requests keep their catalog. For replay, build `epoch.catalog` from the epoch's `catalogAt` view with `resolveEpochCatalog(base, view)`, which recognizes the initial catalog by its hash (or from the `CatalogScheduled` history without replaced versions), while `configuration.catalogHash` stays the initial `catalogHash()`; `replayEpochCommitment` binds the supplied catalog to `record.catalogHash`.
+
+```ts
+import { readEpochRecipes, resolveEpochCatalog } from '@d20dao/vrf-sdk/epoch';
+
+const [hash, recipes, signers] = await registry.catalogAt(epochId); // registry: ethers Contract with epochEntropyAbi
+const recipeBook = await readEpochRecipes(provider, registryAddress, recipes.map(Number));
+const catalog = resolveEpochCatalog({ registry: registryAddress, chainId, firstEpochStart, recipeBook }, { hash, recipes, signers });
+```
 
 At publication a signed attestation may be at most 240 seconds old and never future-dated (`MAX_ATTESTATION_AGE`, exported from `/epoch`); `replayEpochCommitment` enforces the same bound against the commit timestamp.
+
+### Recipes
+
+Epoch sources are recipes in an owner-managed, append-only registry in `EpochEntropy`. A recipe is its canonical request, whose `keccak256` is the query hash the signer signs; a data template that fixes the exact signed bytes the registry accepts ([Data templates](#data-templates)); and the JSON body keepers post to the provider gateway. `registerRecipe(canonicalRequest, template, body)` appends the next id (0 to 255) and emits `RecipeRegistered` with the full definition. A registered recipe never changes, so a changed listing becomes a new id. `recipeCount()` and `getRecipe(id)` read the registry. Every registry registers six built-in recipes itself, at initialization or in its recipe-registry upgrade:
+
+| Recipe | Provider | Query | Exact signed record |
+| --- | --- | --- | --- |
+| 0 | Hyperliquid | `metaAndAssetCtxs`, dex `""`, projection symbol `/0/universe/0/name` and value `/1/0/dayNtlVlm` | `{"symbol":"BTC","value":"<decimal>"}` |
+| 1 | dRPC | `jsonRpc` on Ethereum mainnet: `eth_call` of Multicall3 `getLastBlockHash()` at `latest` | `{"id":null,"jsonrpc":"2.0","result":"0x<64 lowercase hex>"}` |
+| 2 | TickerLayer | `lastTrade`, crypto, BTCUSD | `{"symbol":"BTCUSD","price":<number>,"size":<number>,"timestamp":<1 to 16 digits>}` |
+| 3 | TickerLayer | `lastTrade`, crypto, ETHUSD | as recipe 2 with ETHUSD |
+| 4 | Nodary | `latestFeeds`, name ETH/USD | `{"ETH/USD":{"value":<number>,"timestamp":<13 digits>,"category":"crypto"}}` |
+| 5 | dRPC | as recipe 1 on Base | as recipe 1 |
+
+`BUILTIN_EPOCH_RECIPES` (from `@d20dao/vrf-sdk/epoch`) holds these definitions, and replay uses them unless the catalog carries a `recipeBook`. For any other recipe, put its definition in `epoch.catalog.recipeBook`: `readEpochRecipes(provider, registry, ids)` reads `getRecipe` and checks each query hash, or rebuild it from `RecipeRegistered` logs. Replay checks every definition it uses: the committed packet must carry the recipe's canonical request and the signed data must match its template.
+
+Registry implementations before variable catalogs hardcoded ANU random numbers as recipe 1. Neither public registry ever committed an epoch from it (checked on 2026-09-17), so every published Arc epoch replays with the built-in recipes. Older evidence that did use ANU replays when its definition is supplied in `recipeBook` under id 1: canonical request `["randomNumbers",[["length",4],["size",8],["type","hex8"]]]`, body `{"operation":"randomNumbers","parameters":{"type":"hex8","length":4,"size":8}}` and the template described in [Data templates](#data-templates).
+
+### Data templates
+
+A template is a byte string of segments, each an opcode and its operands:
+
+| Opcode | Segment | Operands | Matches |
+| --- | --- | --- | --- |
+| `0x01` | LITERAL | length n (1 to 128), then n bytes | exactly those bytes |
+| `0x02` | HEX | n (1 to 128) | exactly n characters `0-9a-f` |
+| `0x03` | DECIMAL | flags (0 to 3) | `0` or a nonzero digit followed by digits, then an optional fraction `.digits` when flags & 1 and an optional exponent `(e\|E)(+\|-)?digits` when flags & 2 |
+| `0x04` | INTEGER | min, max (1 ≤ min ≤ max ≤ 128) | a nonzero digit followed by digits, min to max digits in total |
+
+Variable segments are greedy and never backtrack. Signed data is accepted only when the segments consume it exactly, with no trailing bytes, and it is at most 128 bytes (`MAX_DATA_BYTES`). A well-formed template is at most 256 bytes (`MAX_TEMPLATE_BYTES`), contains at least one variable segment and has a shortest possible match of at most 128 bytes. Records therefore have exactly the bytes a template describes: no whitespace, extra fields, reordered keys, escaped characters, uppercase hex or other lengths.
+
+The TypeScript helpers produce and check the same bytes as the contract:
+
+```ts
+import { encodeDataTemplate, decodeDataTemplate, matchesDataTemplate } from '@d20dao/vrf-sdk';
+
+const template = encodeDataTemplate([
+  { literal: '{"symbol":"BTCUSD","price":' }, { decimal: { fraction: true, exponent: true } },
+  { literal: ',"size":' }, { decimal: { fraction: true, exponent: true } },
+  { literal: ',"timestamp":' }, { integer: { minDigits: 1, maxDigits: 16 } }, { literal: '}' },
+]); // equals BUILTIN_EPOCH_RECIPES[2].template
+matchesDataTemplate(template, '0x' + Buffer.from('{"symbol":"BTCUSD","price":117000.5,"size":0.01,"timestamp":1789503538000}').toString('hex')); // true
+decodeDataTemplate(template)[1]; // { decimal: { fraction: true, exponent: true } }
+```
+
+`encodeDataTemplate` throws with the rule a template breaks; `isValidDataTemplate` and `validateDataTemplate` check an encoded template. The ANU record `{"success":true,"type":"hex8","length":"4","data":["<16 hex>","<16 hex>","<16 hex>","<16 hex>"]}` is the literal `{"success":true,"type":"hex8","length":"4","data":["`, then HEX 16 and the literal `","` alternating, and the literal `"]}`.
 
 ## Security and trust
 
@@ -349,10 +403,12 @@ The contracts have not had an external security audit. The coordinator source ca
 Trust model:
 
 - **Owner.** On Arc Mainnet both service proxies are owned by the DAO treasury Safe `0xB57f656149749eff6b496dF090336491f977E744`, which is also the fee recipient; each manifest records the owner for its network. The owner can upgrade either implementation, which can change any behavior. Ownership moves only through a two-step transfer, and `renounceOwnership` reverts.
-- **Owner settings without an upgrade.** Coordinator: fee recipient, keeper share (0–100%), pricing within the bounds in [Pricing](#pricing), and the refund ratio for future requests (50–100%). Registry: committer and signer catalogs for epochs at least two ahead. Open requests keep their escrowed fee and refund ratio.
+- **Owner settings without an upgrade.** Coordinator: fee recipient, keeper share (0–100%), pricing within the bounds in [Pricing](#pricing), and the refund ratio for future requests (50–100%). Registry: committer, up to four backup committers, recipe registration (append-only) and catalogs for epochs at least two ahead. Open requests keep their escrowed fee and refund ratio.
+- **Publishers.** The committer and each backup committer can publish an epoch from any valid signed record of its selected source, under the same rules. A backup committer earns nothing and has no other role.
+- **Recipes.** A signature establishes what a provider's gateway signed for a recipe's request, not that the upstream value is unbiased. The owner decides which recipes and signers future epochs use; a lax template accepts more signed records for a publisher to choose from.
 - **Keeper.** The VRF key holder can withhold a proof but cannot substitute a different result for a request's fixed seed. A request that is not served within 60 seconds is refundable at its snapshotted ratio.
 
-D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers; `renounceOwnership` reverts on both, so upgrade authority can only move through an accepted transfer. The registry owner can change the committer and schedule future catalogs; the coordinator owner can change fee recipient, keeper share, bounded pricing and the refund ratio. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Verify the implementation history of BOTH proxies at the relevant receipts; stable proxy addresses alone do not identify executed code. In practice, check it when you integrate and again whenever the deployment manifest records an upgrade or a proxy emits `Upgraded(implementation)`; a mismatch with the manifest means you should stop and review before sending more requests. Operators pin the proxy code, initialized configuration and both implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change.
+D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers; `renounceOwnership` reverts on both, so upgrade authority can only move through an accepted transfer. The registry owner can change the committer, allow backup committers, register recipes and schedule future catalogs; the coordinator owner can change fee recipient, keeper share, bounded pricing and the refund ratio. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Verify the implementation history of BOTH proxies at the relevant receipts; stable proxy addresses alone do not identify executed code. In practice, check it when you integrate and again whenever the deployment manifest records an upgrade or a proxy emits `Upgraded(implementation)`; a mismatch with the manifest means you should stop and review before sending more requests. Operators pin the proxy code, initialized configuration and both implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change.
 
 ## Use locally
 
@@ -365,7 +421,7 @@ const mapping = builtins.d20();
 // Use only an independently verified accepted word for real outcomes.
 ```
 
-The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers and `MAX_ATTESTATION_AGE`. `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`, both described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
+The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers, `BUILTIN_EPOCH_RECIPES`, `readEpochRecipes`, `resolveEpochCatalog` and `MAX_ATTESTATION_AGE`, and the root also exports the data-template helpers (`encodeDataTemplate`, `decodeDataTemplate`, `matchesDataTemplate`, `isValidDataTemplate`, `validateDataTemplate`). `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`, both described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
 
 ## Operational and release boundary
 
@@ -381,7 +437,7 @@ SDK installation provides consumer and verification tooling. Chain availability,
 
 ## Deployments
 
-Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json), and check that the coordinator implementation at your chain's proxy exposes `quoteFee`/`quoteFeeAt` (its code hash matches the manifest entry for this protocol version) before relying on this SDK's interface.
+The registry ABI, `API.md` and epoch helpers in this package describe the recipe-registry implementation of `EpochEntropy`. On 2026-09-17 neither network runs it yet: the Arc Mainnet registry implementation predates variable catalogs and the recipe registry, and the Arc Testnet one has variable catalogs but no recipe registry. The owner installs it with `upgradeToAndCall(implementation, initializeRecipeRegistry())`, after which the manifest records the new implementation; until then read those registries with the ABI of SDK 0.3.4. Epochs already published on either network replay with this SDK's built-in recipes. Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json), and check that the coordinator implementation at your chain's proxy exposes `quoteFee`/`quoteFeeAt` (its code hash matches the manifest entry for this protocol version) before relying on this SDK's interface.
 
 ### Arc Mainnet
 
@@ -396,7 +452,7 @@ Chain ID: **5042**. The live service; use the **coordinator proxy** when constru
 | EpochEntropy | Implementation | [`0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5`](https://explorer.arc.io/address/0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://explorer.arc.io/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
-Addresses are copied from the [Arc Mainnet deployment manifest](https://d20dao.org/deployments/arc-mainnet.json). Mainnet and testnet run the same implementation code.
+Addresses are copied from the [Arc Mainnet deployment manifest](https://d20dao.org/deployments/arc-mainnet.json). Mainnet and testnet run the same coordinator implementation.
 
 ### Arc Testnet
 
@@ -408,7 +464,7 @@ Chain ID: **5042002**. For development and testing. Use the **coordinator proxy*
 | EpochEntropy | Epoch registry / proxy | [`0xD20Da00B47A7cD2211dC4683E306913b05903756`](https://testnet.arcscan.app/address/0xD20Da00B47A7cD2211dC4683E306913b05903756) |
 | D20CostClient | Restricted cost client / proxy | [`0xD20da026090B8472579a2B93030F1fC4c94807F1`](https://testnet.arcscan.app/address/0xD20da026090B8472579a2B93030F1fC4c94807F1) |
 | D20VRFCoordinator | Implementation | [`0xD20da0c375cEfCdA65703699A4090237057e9b68`](https://testnet.arcscan.app/address/0xD20da0c375cEfCdA65703699A4090237057e9b68) |
-| EpochEntropy | Implementation | [`0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5`](https://testnet.arcscan.app/address/0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5) |
+| EpochEntropy | Implementation | [`0xD20dA0311C56f92d841d5c74F15ec691e0cfB960`](https://testnet.arcscan.app/address/0xD20dA0311C56f92d841d5c74F15ec691e0cfB960) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://testnet.arcscan.app/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
 Addresses are copied from the [Arc Testnet deployment manifest](https://d20dao.org/deployments/arc-testnet.json). Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses change through owner-authorized upgrades, so the implementation rows and code hashes are only valid together with the manifest revision they came from. The pilot consumer is test tooling, not a shared application entry point.

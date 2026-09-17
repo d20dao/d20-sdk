@@ -1,6 +1,6 @@
 {
   "name": "@d20dao/vrf-sdk",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "D20DAO verifiable randomness: Solidity consumer helpers, contract ABIs and public proof replay",
   "publishConfig": {
     "access": "public",

@@ -1,6 +1,6 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.1`.
+Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.3.2`.
 
 ## Getting started
 
@@ -129,9 +129,24 @@ SDK installation provides consumer and verification tooling. Chain availability,
 
 Obtain proxy addresses, implementation addresses and independently checked code hashes from the keeper's deployment manifests, and check that the coordinator implementation at your chain's proxy exposes `quoteFee`/`quoteFeeAt` (its code hash matches the manifest entry for this protocol version) before relying on this SDK's interface. The testnet upgrade to this protocol version and the Arc mainnet deployment are published there when confirmed.
 
+### Arc Mainnet
+
+Chain ID: **5042**. The live service; use the **coordinator proxy** when constructing a consumer. Owner and fee recipient: DAO treasury Safe `0xB57f656149749eff6b496dF090336491f977E744`.
+
+| Contract | Role | Arc Mainnet address |
+| --- | --- | --- |
+| D20VRFCoordinator | Consumer entry point / proxy | [`0xd20da057469C45928912d983F45790C41e290571`](https://explorer.arc.io/address/0xd20da057469C45928912d983F45790C41e290571) |
+| EpochEntropy | Epoch registry / proxy | [`0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D`](https://explorer.arc.io/address/0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D) |
+| D20CostClient | Restricted cost client / proxy | [`0xD20da0048aED2BBb9f0e7078Bc452815D626D29d`](https://explorer.arc.io/address/0xD20da0048aED2BBb9f0e7078Bc452815D626D29d) |
+| D20VRFCoordinator | Implementation | [`0xD20da0c375cEfCdA65703699A4090237057e9b68`](https://explorer.arc.io/address/0xD20da0c375cEfCdA65703699A4090237057e9b68) |
+| EpochEntropy | Implementation | [`0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5`](https://explorer.arc.io/address/0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5) |
+| D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://explorer.arc.io/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
+
+Addresses are copied from the [Arc Mainnet deployment manifest](https://github.com/d20dao/keeper/blob/main/deployments/arc-mainnet.json). Mainnet and testnet run the same implementation code.
+
 ### Arc Testnet
 
-Chain ID: **5042002**. Use the **coordinator proxy** when constructing a consumer.
+Chain ID: **5042002**. For development and testing. Use the **coordinator proxy** when constructing a consumer.
 
 | Contract | Role | Arc Testnet address |
 | --- | --- | --- |

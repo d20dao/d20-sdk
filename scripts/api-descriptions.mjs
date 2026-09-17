@@ -224,7 +224,7 @@ export const references = [
         items: {
           getRequest: {
             caller: 'Anyone (view)',
-            src: '289-308, 556-561',
+            src: '289-308, 558-563',
             text: 'Full state of a request, see [`D20VRFCoordinator.Request`](#coordinator-type-d20vrfcoordinator-request). `targetBlock` and `epochHash` are resolved from the registry, so they become non-zero as soon as the epoch packet is published. `fulfilled` means the word is final; `delivered` only reports that a callback succeeded. A request that is not `fulfilled` in a block whose timestamp is after `deadline` has expired and can only be refunded. When polling, read the latest block before `getRequest`, so that a proof included up to that block is visible.',
             errors: ['UnknownRequest'],
           },
@@ -260,7 +260,7 @@ export const references = [
           },
           refundCallbackDelivered: {
             caller: 'Anyone (view)',
-            src: '103, 509',
+            src: '103, 511',
             text: 'True once an `onRefund` notification for the request succeeded, at `refundRequest` or `retryRefundCallback`. Returns false for unknown IDs instead of reverting.',
           },
           nextRequestId: {
@@ -276,42 +276,42 @@ export const references = [
         items: {
           refundRequest: {
             caller: 'Anyone',
-            src: '464-488, 500-511',
+            src: '466-490, 502-513',
             text: 'Refunds an unfulfilled request once a block timestamp is after its deadline. Marks it refunded, sends `feePaid × requestRefundBps / 10000` to the fixed refund address with a 30,000-gas transfer, or adds it to that address\'s refund credit if the transfer fails, and adds the rest of the fee to `earnedFees`. Then calls `onRefund(requestId)` on the consumer with 100,000 gas; a failed notification does not undo the refund. The caller receives nothing. Measured minimum transaction gas limit 302,558 to 357,517; use 400,000.',
             emits: ['RequestRefundedTo', 'RefundCallbackAttempted'],
             errors: ['UnknownRequest', 'RefundNotAvailable', 'InsufficientCallbackGas'],
           },
           retryCallback: {
             caller: 'Anyone',
-            src: '454-462, 611-628',
+            src: '456-464, 613-630',
             text: 'Calls `rawFulfillRandomness` again with the same accepted word after a failed callback, forwarding `gasLimit` (30,000 to 1,000,000 and not below the request\'s `callbackGasLimit`). Sets `delivered` on success. Pays nobody and never changes the word. Transaction gas limit: about `gasLimit + 250,000`.',
             emits: ['CallbackAttempted'],
             errors: ['UnknownRequest', 'NotFulfilled', 'AlreadyDelivered', 'InvalidCallbackGas', 'InsufficientCallbackGas'],
           },
           retryRefundCallback: {
             caller: 'Anyone',
-            src: '490-498, 500-511',
+            src: '492-500, 502-513',
             text: 'Repeats a failed `onRefund` notification for a refunded request with `gasLimit` (100,000 to 1,000,000). Never transfers funds again. Transaction gas limit: about `gasLimit + 150,000`.',
             emits: ['RefundCallbackAttempted'],
             errors: ['UnknownRequest', 'NotRefunded', 'RefundCallbackAlreadyDelivered', 'InvalidCallbackGas', 'InsufficientCallbackGas'],
           },
           withdrawRefundCredit: {
             caller: 'Refund-credit holder',
-            src: '513-523',
+            src: '515-525',
             text: 'Sends all of the caller\'s refund credit, `refundCredits(msg.sender)`, to `recipient` with all remaining gas. Credit comes from overpayment and from refund transfers that failed, and belongs to the request\'s refund address, so that address must make the call. If `recipient` rejects the transfer the call reverts and the credit stays.',
             emits: ['RefundCreditWithdrawn'],
             errors: ['InvalidRefundAddress', 'NoRefundCredit', 'TransferFailed'],
           },
           withdrawFees: {
             caller: 'Fee recipient',
-            src: '525-534',
+            src: '527-536',
             text: 'Sends all `earnedFees` to `recipient`. Fees accrue at acceptance (fee minus keeper share) and from the part of a refunded fee that is not returned; open escrow is never included. With nothing earned it sends zero without reverting.',
             emits: ['FeesWithdrawn'],
             errors: ['OnlyFeeRecipient', 'InvalidConfig', 'TransferFailed'],
           },
           withdrawKeeperCredit: {
             caller: 'Keeper-credit holder',
-            src: '536-545',
+            src: '538-547',
             text: 'Sends all of the caller\'s keeper credit (keeper-share transfers that failed) to `recipient`.',
             emits: ['KeeperCreditWithdrawn'],
             errors: ['InvalidConfig', 'NoKeeperCredit', 'TransferFailed'],
@@ -327,7 +327,7 @@ export const references = [
           totalRefundCredits: { src: '56', text: 'Sum of all refund credit held by the coordinator.' },
           earnedFees: { src: '52', text: 'Protocol fees that the fee recipient can withdraw.' },
           feeRecipient: { src: '40', text: 'Address allowed to call `withdrawFees`; changed with `setFeeRecipient`.' },
-          keeperFeeBps: { src: '41, 431', text: 'Keeper share of each accepted fee in basis points (0 to 10000). Read at acceptance, not snapshotted: a change applies to open requests accepted afterwards. It only splits the escrowed fee; what the consumer paid and can be refunded does not change.' },
+          keeperFeeBps: { src: '41, 433', text: 'Keeper share of each accepted fee in basis points (0 to 10000). Read at acceptance, not snapshotted: a change applies to open requests accepted afterwards. It only splits the escrowed fee; what the consumer paid and can be refunded does not change.' },
           keeperCredits: { src: '42', text: 'Keeper credit that an address can withdraw with `withdrawKeeperCredit`.' },
           totalKeeperCredits: { src: '43', text: 'Sum of all keeper credit held by the coordinator.' },
         },
@@ -338,7 +338,7 @@ export const references = [
         items: {
           fulfillRandomness: {
             caller: 'Anyone',
-            src: '389-397, 413-446',
+            src: '389-397, 413-448',
             text: 'Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) to `committer()` with 30,000 gas, or records it as keeper credit. A failing callback does not revert the fulfillment.',
             emits: ['BlockHashStored', 'RequestServed', 'ProofVerified', 'RandomnessFulfilled', 'FulfillmentEvidence', 'CallbackAttempted', 'KeeperFeePaid'],
             errors: ['UnknownRequest', 'AlreadyFulfilled', 'RequestRefunded', 'RequestExpired', 'NotReady', 'BlockHashUnavailable', 'WrongPublicKey', 'WrongSeed', 'EvidencePacketTooLarge', 'InsufficientCallbackGas'],
@@ -352,7 +352,7 @@ export const references = [
           },
           storeBlockHash: {
             caller: 'Anyone',
-            src: '368-372, 562-577',
+            src: '368-372, 564-579',
             text: 'Resolves the target block from the published epoch, stores its hash if not stored yet and returns it. Fulfillment does this automatically; calling it earlier keeps a request provable after its target leaves the 256-block `BLOCKHASH` window. Needs `block.number` at least `targetBlock + confirmationBlocks`. Works on any request, whatever its status.',
             emits: ['BlockHashStored'],
             errors: ['UnknownRequest', 'NotReady', 'BlockHashUnavailable'],
@@ -365,7 +365,7 @@ export const references = [
           },
           requestSeed: {
             caller: 'Anyone (view)',
-            src: '374-379, 579-587',
+            src: '374-379, 581-589',
             text: 'Seed the proof must use: `keccak256(abi.encode(SEED_DOMAIN, chainId, coordinator, keyHash, requestId, consumer, clientSeed, mappingHash, requestBlock, targetBlock, blockHash, epochId, epochHash))` as uint256. Available only after publication and `confirmationBlocks` confirmations of the target block.',
             errors: ['UnknownRequest', 'NotReady', 'BlockHashUnavailable'],
           },
@@ -388,13 +388,13 @@ export const references = [
         table: true,
         intro: 'Views, callable by anyone. Nothing here has a setter except through an upgrade.',
         items: {
-          lastServedRequestId: { src: '53, 433', text: 'ID of the most recently accepted request; 0 before the first.' },
-          lastServedIndex: { src: '54, 434', text: 'Number of accepted requests so far: the `serveIndex` of the latest `RequestServed`.' },
-          servedRequestAt: { src: '55, 434', text: 'Request ID accepted at a serve index (from 1); 0 for an index not used yet.' },
+          lastServedRequestId: { src: '53, 435', text: 'ID of the most recently accepted request; 0 before the first.' },
+          lastServedIndex: { src: '54, 436', text: 'Number of accepted requests so far: the `serveIndex` of the latest `RequestServed`.' },
+          servedRequestAt: { src: '55, 436', text: 'Request ID accepted at a serve index (from 1); 0 for an index not used yet.' },
           keyHash: { src: '37, 180', text: '`keccak256(abi.encode(publicKey))` of the VRF key; indexed in `RandomnessRequested` and `ProofVerified`.' },
           publicKeyX: { src: '35', text: 'x coordinate of the VRF public key.' },
           publicKeyY: { src: '36', text: 'y coordinate of the VRF public key.' },
-          confirmationBlocks: { src: '45, 564', text: 'Blocks after the target block before the seed and proofs become available (1 to 64, set at initialization).' },
+          confirmationBlocks: { src: '45, 566', text: 'Blocks after the target block before the seed and proofs become available (1 to 64, set at initialization).' },
           epochRegistry: { src: '33', text: 'The `EpochEntropy` proxy that supplies epochs and the keeper-share recipient.' },
           protocolConfigurationHash: { src: '32, 190', text: 'Hash of the initialized configuration (public key, initial fee recipient, initial minimum fee, confirmations, registry, initial catalog hash, first epoch start, epoch length 200) under `CONFIG_DOMAIN`. Bound into every transcript hash.' },
           initialFeeRecipient: { src: '39, 182', text: 'Fee recipient given to `initialize`, used by replay. The live payout address is `feeRecipient()`.' },
@@ -483,31 +483,31 @@ export const references = [
             text: '`msg.value` exceeded the fee and `amount` was added to `refundCredits(refundAddress)`, independently of what happens to the request. Emitted before `RandomnessRequested`.',
           },
           BlockHashStored: {
-            src: '144, 570-577',
+            src: '144, 572-579',
             text: 'The target block hash of the request was stored. Emitted once per request: by `storeBlockHash`, or by fulfillment if the hash was not stored before.',
           },
           RequestServed: {
-            src: '160, 433-435',
+            src: '160, 435-437',
             text: 'A proof was accepted. `serveIndex` counts accepted requests from 1 (`lastServedIndex`, `servedRequestAt`).',
           },
           ProofVerified: {
-            src: '159, 436',
+            src: '159, 438',
             text: 'Seed and hash of the accepted proof.',
           },
           RandomnessFulfilled: {
-            src: '145, 437',
+            src: '145, 439',
             text: 'A proof was accepted and `randomness` is final. `submitter` sent the transaction and is not paid for it.',
           },
           FulfillmentEvidence: {
-            src: '163-164, 448-452',
+            src: '163-164, 450-454',
             text: 'The accepted proof as a 416-byte ABI-encoded packet, indexed by `transcriptHash`. Decode it with `decodeEvidencePacket`; take evidence from this log, not from calldata, since a batch carries several proofs.',
           },
           CallbackAttempted: {
-            src: '146, 611-628',
+            src: '146, 613-630',
             text: 'Result of calling `rawFulfillRandomness` with `gasLimit` gas, at fulfillment and at each `retryCallback`. `success` false means the consumer reverted, ran out of gas or has no code; the word is accepted either way.',
           },
           KeeperFeePaid: {
-            src: '153, 440-445',
+            src: '153, 442-447',
             text: 'At acceptance, when the keeper share is non-zero: `amount` went to `keeper`, the submitter when the registry authorizes it and `committer()` otherwise, by a 30,000-gas transfer (`paid` true) or was added to `keeperCredits(keeper)` (`paid` false). Emitted after `CallbackAttempted`.',
           },
           FulfillmentSkipped: {
@@ -515,11 +515,11 @@ export const references = [
             text: 'A batch member was left untouched: `reason` 1 already fulfilled, 2 refunded, 3 past its deadline.',
           },
           RequestRefundedTo: {
-            src: '155, 486',
+            src: '155, 488',
             text: 'An expired request was refunded: `amount` (`feePaid × requestRefundBps / 10000`) was sent to `refundAddress` (`paid` true) or added to its refund credit (`paid` false).',
           },
           RefundCallbackAttempted: {
-            src: '157, 500-511',
+            src: '157, 502-513',
             text: 'Result of calling `onRefund(requestId)` on `consumer` with `gasLimit` gas: 100,000 at `refundRequest`, the caller\'s limit at `retryRefundCallback`.',
           },
         },
@@ -527,9 +527,9 @@ export const references = [
       {
         title: 'Credits and withdrawals',
         items: {
-          RefundCreditWithdrawn: { src: '156, 522', text: '`owner`, the credit holder (not the contract owner), withdrew `amount` of refund credit to `recipient`.' },
-          KeeperCreditWithdrawn: { src: '154, 544', text: '`keeper` withdrew `amount` of keeper credit to `recipient`.' },
-          FeesWithdrawn: { src: '147, 533', text: 'The fee recipient withdrew `amount` of earned fees to `recipient`.' },
+          RefundCreditWithdrawn: { src: '156, 524', text: '`owner`, the credit holder (not the contract owner), withdrew `amount` of refund credit to `recipient`.' },
+          KeeperCreditWithdrawn: { src: '154, 546', text: '`keeper` withdrew `amount` of keeper credit to `recipient`.' },
+          FeesWithdrawn: { src: '147, 535', text: 'The fee recipient withdrew `amount` of earned fees to `recipient`.' },
         },
       },
       {
@@ -553,12 +553,12 @@ export const references = [
             response: 'Send the request through a deployed consumer contract (README [Integrate a consumer](README.md#integrate-a-consumer)), and not from its constructor.',
           },
           InvalidRefundAddress: {
-            src: '125, 252, 515',
+            src: '125, 252, 517',
             text: 'A request named the zero address as refund address, or `withdrawRefundCredit` named the zero address as recipient.',
             response: 'Pass a non-zero address that can receive a plain native transfer or call `withdrawRefundCredit`.',
           },
           InvalidCallbackGas: {
-            src: '113, 460, 496, 607-609',
+            src: '113, 462, 498, 609-611',
             text: 'A gas limit is out of range: a request `callbackGasLimit` outside 30,000 to 1,000,000; a `retryCallback` limit outside that range or below the request\'s `callbackGasLimit`; a `retryRefundCallback` limit outside 100,000 to 1,000,000.',
             response: 'Use a limit inside the range; retry with at least the original limit.',
           },
@@ -588,37 +588,37 @@ export const references = [
         title: 'Reading and recovery',
         items: {
           UnknownRequest: {
-            src: '114, 547-550',
+            src: '114, 549-552',
             text: 'No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also reverts a whole `fulfillRandomnessBatch`.',
             response: 'Take `requestId` from the `RandomnessRequested` log of the request receipt, and read from the same chain and coordinator proxy.',
           },
           NotFulfilled: {
-            src: '118, 347, 457',
+            src: '118, 347, 459',
             text: '`getMappedResult` or `retryCallback` on a request without an accepted proof, including an expired or refunded one.',
             response: 'Poll `getRequest(requestId)` until `fulfilled`. Once a block timestamp is after `deadline` without fulfillment, the request has expired and only `refundRequest` applies.',
           },
           AlreadyDelivered: {
-            src: '119, 458',
+            src: '119, 460',
             text: '`retryCallback` on a request whose callback already succeeded.',
             response: 'Nothing to retry.',
           },
           RefundNotAvailable: {
-            src: '128, 469',
+            src: '128, 471',
             text: '`refundRequest` on a request that is fulfilled, already refunded, or not yet past its deadline (the block timestamp must be greater than `deadline`).',
             response: 'Read `getRequest`: use the result if `fulfilled`, stop if `refunded`, otherwise retry after a block with a later timestamp than `deadline`.',
           },
           NotRefunded: {
-            src: '131, 493',
+            src: '131, 495',
             text: '`retryRefundCallback` on a request that has not been refunded.',
             response: 'Call `refundRequest` after the deadline first.',
           },
           RefundCallbackAlreadyDelivered: {
-            src: '132, 494',
+            src: '132, 496',
             text: '`retryRefundCallback` after an `onRefund` notification already succeeded (`refundCallbackDelivered`).',
             response: 'Nothing to retry.',
           },
           InsufficientCallbackGas: {
-            src: '122, 478, 503, 619-620',
+            src: '122, 480, 505, 621-622',
             text: 'Too little gas remained to forward the full callback budget and keep the coordinator\'s reserve: `gasLimit + gasLimit/63 + 140,000` before a fulfillment callback, `100,000 + 100,000/63 + 140,000` after refund settlement, `gasLimit + gasLimit/63 + 50,000` before a refund notification. The coordinator reverts instead of forwarding less.',
             response: 'Raise the transaction gas limit: 400,000 for `refundRequest`, `gasLimit + 250,000` for `retryCallback`, `gasLimit + 150,000` for `retryRefundCallback` (README [Gas for refund and retry calls](README.md#gas-for-refund-and-retry-calls)). `eth_estimateGas` finds the minimum.',
           },
@@ -628,22 +628,22 @@ export const references = [
         title: 'Credits and withdrawals',
         items: {
           NoRefundCredit: {
-            src: '129, 517',
+            src: '129, 519',
             text: '`withdrawRefundCredit` from an address without refund credit. Credit is keyed by the refund address, which must be `msg.sender`.',
             response: 'Call from the refund address; `refundCredits(address)` shows the balance.',
           },
           TransferFailed: {
-            src: '124, 521, 532, 543',
+            src: '124, 523, 534, 545',
             text: 'The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCredit` rejected the native transfer. Balances are unchanged.',
             response: 'Choose a recipient that accepts plain native transfers.',
           },
           OnlyFeeRecipient: {
-            src: '123, 527',
+            src: '123, 529',
             text: '`withdrawFees` from an address other than `feeRecipient()`.',
             response: 'Only the fee recipient withdraws protocol fees.',
           },
           NoKeeperCredit: {
-            src: '130, 539',
+            src: '130, 541',
             text: '`withdrawKeeperCredit` from an address without keeper credit.',
             response: '`keeperCredits(address)` shows the balance.',
           },
@@ -653,12 +653,12 @@ export const references = [
         title: 'Proofs and keepers',
         items: {
           NotReady: {
-            src: '115, 564',
+            src: '115, 566',
             text: 'The request cannot be proven yet: its epoch packet is not published, or `block.number` is below `targetBlock + confirmationBlocks`.',
             response: 'For a consumer this only means the request is still waiting. Keepers retry after publication and confirmations.',
           },
           BlockHashUnavailable: {
-            src: '116, 567',
+            src: '116, 569',
             text: 'The target block hash was never stored and is outside the 256-block `BLOCKHASH` window. The request can no longer be fulfilled.',
             response: 'Call `refundRequest` after the deadline. Keepers call `storeBlockHash` before the window closes.',
           },
@@ -678,17 +678,17 @@ export const references = [
             response: 'The request can only be refunded with `refundRequest`.',
           },
           WrongPublicKey: {
-            src: '120, 592',
+            src: '120, 594',
             text: 'The proof\'s `pk` is not the coordinator\'s VRF key.',
             response: 'Only proofs from the configured key are accepted.',
           },
           WrongSeed: {
-            src: '121, 594',
+            src: '121, 596',
             text: 'The proof\'s `seed` differs from `requestSeed(requestId)`.',
             response: 'Prove the stored seed; it cannot change.',
           },
           EvidencePacketTooLarge: {
-            src: '134, 450',
+            src: '134, 452',
             text: 'The encoded proof exceeds `MAX_EVIDENCE_PACKET_BYTES`. A proof always encodes to 416 bytes, so valid calls never reach this bound.',
             response: 'None expected.',
           },
@@ -708,7 +708,7 @@ export const references = [
         title: 'Administration, initialization and upgrades',
         items: {
           InvalidConfig: {
-            src: '108, 174-175, 198, 202, 207, 216, 528, 537',
+            src: '108, 174-175, 198, 202, 207, 216, 530, 539',
             text: 'A value is out of bounds: in `initialize` (zero fee recipient, confirmations 0 or above 64, keeper share above 10000, minimum fee above 10 USDC, registry without code), `setFeeRecipient` with zero, `setKeeperFeeBps` above 10000, `setPricing` outside its bounds, `setRefundBps` outside 5000 to 10000, or a zero `recipient` for `withdrawFees` or `withdrawKeeperCredit`.',
             response: 'Use values within the bounds given for each function.',
           },

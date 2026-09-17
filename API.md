@@ -5,7 +5,7 @@
 Every function, event and error of `D20VRFCoordinator` and `EpochEntropy`, generated from the ABIs of `@d20dao/vrf-sdk` 0.4.0. Regenerate with `npm run build && npm run api-reference`; `npm test` fails when this file is out of date.
 
 - Package: `@d20dao/vrf-sdk` 0.4.0
-- Protocol source: commit `80c6b4b3451dd497399a8d91e3035585965d9ab9`, copied to [`protocol/contracts/`](protocol/contracts/) (hashes in `PROTOCOL-PROVENANCE.json`)
+- Protocol source: commit `e1dc473d87db69b916d9f6919a62d8ea8ee24487`, copied to [`protocol/contracts/`](protocol/contracts/) (hashes in `PROTOCOL-PROVENANCE.json`)
 - Compiler: solc 0.8.28+commit.7893614a.Emscripten.clang, EVM version `cancun`
 - `abi/D20VRFCoordinator.json` SHA-256: `4764ba62745e109f3b968b21ed23e88da739a4a26906fc2ed3192fa23b8d79c1`
 - `abi/EpochEntropy.json` SHA-256: `684ee3dfe0745f141831aee896db6436d490d5e9715e61661c86b044d1c3260e`
@@ -192,7 +192,7 @@ Views, callable by anyone, including from a callback. Request IDs start at 1 and
 function getRequest(uint256 requestId) external view returns (D20VRFCoordinator.Request result)
 ```
 
-Selector `0xc58343ef` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 289–308, 556–561
+Selector `0xc58343ef` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 289–308, 558–563
 
 Full state of a request, see [`D20VRFCoordinator.Request`](#coordinator-type-d20vrfcoordinator-request). `targetBlock` and `epochHash` are resolved from the registry, so they become non-zero as soon as the epoch packet is published. `fulfilled` means the word is final; `delivered` only reports that a callback succeeded. A request that is not `fulfilled` in a block whose timestamp is after `deadline` has expired and can only be refunded. When polling, read the latest block before `getRequest`, so that a proof included up to that block is visible.
 
@@ -264,7 +264,7 @@ Refund ratio the request copied from `refundBps` at creation. An expiry refund p
 function refundCallbackDelivered(uint256) external view returns (bool)
 ```
 
-Selector `0x281d3157` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 103, 509
+Selector `0x281d3157` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 103, 511
 
 True once an `onRefund` notification for the request succeeded, at `refundRequest` or `retryRefundCallback`. Returns false for unknown IDs instead of reverting.
 
@@ -288,7 +288,7 @@ Recovery calls need no value or role. They forward gas to the consumer and rever
 function refundRequest(uint256 requestId) external
 ```
 
-Selector `0x7411484e` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 464–488, 500–511
+Selector `0x7411484e` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 466–490, 502–513
 
 Refunds an unfulfilled request once a block timestamp is after its deadline. Marks it refunded, sends `feePaid × requestRefundBps / 10000` to the fixed refund address with a 30,000-gas transfer, or adds it to that address's refund credit if the transfer fails, and adds the rest of the fee to `earnedFees`. Then calls `onRefund(requestId)` on the consumer with 100,000 gas; a failed notification does not undo the refund. The caller receives nothing. Measured minimum transaction gas limit 302,558 to 357,517; use 400,000.
 
@@ -302,7 +302,7 @@ Refunds an unfulfilled request once a block timestamp is after its deadline. Mar
 function retryCallback(uint256 requestId, uint32 gasLimit) external
 ```
 
-Selector `0xdd11c275` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 454–462, 611–628
+Selector `0xdd11c275` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 456–464, 613–630
 
 Calls `rawFulfillRandomness` again with the same accepted word after a failed callback, forwarding `gasLimit` (30,000 to 1,000,000 and not below the request's `callbackGasLimit`). Sets `delivered` on success. Pays nobody and never changes the word. Transaction gas limit: about `gasLimit + 250,000`.
 
@@ -316,7 +316,7 @@ Calls `rawFulfillRandomness` again with the same accepted word after a failed ca
 function retryRefundCallback(uint256 requestId, uint32 gasLimit) external
 ```
 
-Selector `0x054f6962` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 490–498, 500–511
+Selector `0x054f6962` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 492–500, 502–513
 
 Repeats a failed `onRefund` notification for a refunded request with `gasLimit` (100,000 to 1,000,000). Never transfers funds again. Transaction gas limit: about `gasLimit + 150,000`.
 
@@ -330,7 +330,7 @@ Repeats a failed `onRefund` notification for a refunded request with `gasLimit` 
 function withdrawRefundCredit(address recipient) external
 ```
 
-Selector `0x445071f2` · Caller: Refund-credit holder · Source: `D20VRFCoordinator.sol` lines 513–523
+Selector `0x445071f2` · Caller: Refund-credit holder · Source: `D20VRFCoordinator.sol` lines 515–525
 
 Sends all of the caller's refund credit, `refundCredits(msg.sender)`, to `recipient` with all remaining gas. Credit comes from overpayment and from refund transfers that failed, and belongs to the request's refund address, so that address must make the call. If `recipient` rejects the transfer the call reverts and the credit stays.
 
@@ -344,7 +344,7 @@ Sends all of the caller's refund credit, `refundCredits(msg.sender)`, to `recipi
 function withdrawFees(address recipient) external
 ```
 
-Selector `0x164e68de` · Caller: Fee recipient · Source: `D20VRFCoordinator.sol` lines 525–534
+Selector `0x164e68de` · Caller: Fee recipient · Source: `D20VRFCoordinator.sol` lines 527–536
 
 Sends all `earnedFees` to `recipient`. Fees accrue at acceptance (fee minus keeper share) and from the part of a refunded fee that is not returned; open escrow is never included. With nothing earned it sends zero without reverting.
 
@@ -358,7 +358,7 @@ Sends all `earnedFees` to `recipient`. Fees accrue at acceptance (fee minus keep
 function withdrawKeeperCredit(address recipient) external
 ```
 
-Selector `0xf62c546b` · Caller: Keeper-credit holder · Source: `D20VRFCoordinator.sol` lines 536–545
+Selector `0xf62c546b` · Caller: Keeper-credit holder · Source: `D20VRFCoordinator.sol` lines 538–547
 
 Sends all of the caller's keeper credit (keeper-share transfers that failed) to `recipient`.
 
@@ -376,7 +376,7 @@ Views, callable by anyone. Amounts are in wei of native USDC.
 | <a id="coordinator-fn-totalrefundcredits"></a>`totalRefundCredits() returns (uint256)` | `0x6e0842e1` | Sum of all refund credit held by the coordinator. | line 56 |
 | <a id="coordinator-fn-earnedfees"></a>`earnedFees() returns (uint256)` | `0xb1b3ffd9` | Protocol fees that the fee recipient can withdraw. | line 52 |
 | <a id="coordinator-fn-feerecipient"></a>`feeRecipient() returns (address)` | `0x46904840` | Address allowed to call `withdrawFees`; changed with `setFeeRecipient`. | line 40 |
-| <a id="coordinator-fn-keeperfeebps"></a>`keeperFeeBps() returns (uint16)` | `0x0eab7d63` | Keeper share of each accepted fee in basis points (0 to 10000). Read at acceptance, not snapshotted: a change applies to open requests accepted afterwards. It only splits the escrowed fee; what the consumer paid and can be refunded does not change. | lines 41, 431 |
+| <a id="coordinator-fn-keeperfeebps"></a>`keeperFeeBps() returns (uint16)` | `0x0eab7d63` | Keeper share of each accepted fee in basis points (0 to 10000). Read at acceptance, not snapshotted: a change applies to open requests accepted afterwards. It only splits the escrowed fee; what the consumer paid and can be refunded does not change. | lines 41, 433 |
 | <a id="coordinator-fn-keepercredits"></a>`keeperCredits(address) returns (uint256)` | `0xf5c764f6` | Keeper credit that an address can withdraw with `withdrawKeeperCredit`. | line 42 |
 | <a id="coordinator-fn-totalkeepercredits"></a>`totalKeeperCredits() returns (uint256)` | `0xc7281b7a` | Sum of all keeper credit held by the coordinator. | line 43 |
 
@@ -390,7 +390,7 @@ Proof submission is permissionless: anyone holding a valid proof may submit it, 
 function fulfillRandomness(uint256 requestId, VRF.Proof proof) external
 ```
 
-Selector `0xef7c2b19` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 389–397, 413–446
+Selector `0xef7c2b19` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 389–397, 413–448
 
 Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) to `committer()` with 30,000 gas, or records it as keeper credit. A failing callback does not revert the fulfillment.
 
@@ -418,7 +418,7 @@ Fulfills up to `MAX_FULFILL_BATCH` (16) requests, one proof each. Members alread
 function storeBlockHash(uint256 requestId) external returns (bytes32)
 ```
 
-Selector `0x262fd733` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 368–372, 562–577
+Selector `0x262fd733` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 368–372, 564–579
 
 Resolves the target block from the published epoch, stores its hash if not stored yet and returns it. Fulfillment does this automatically; calling it earlier keeps a request provable after its target leaves the 256-block `BLOCKHASH` window. Needs `block.number` at least `targetBlock + confirmationBlocks`. Works on any request, whatever its status.
 
@@ -444,7 +444,7 @@ Returns the word a proof yields for the request's seed, without changing state. 
 function requestSeed(uint256 requestId) external view returns (uint256)
 ```
 
-Selector `0xa9df851a` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 374–379, 579–587
+Selector `0xa9df851a` · Caller: Anyone (view) · Source: `D20VRFCoordinator.sol` lines 374–379, 581–589
 
 Seed the proof must use: `keccak256(abi.encode(SEED_DOMAIN, chainId, coordinator, keyHash, requestId, consumer, clientSeed, mappingHash, requestBlock, targetBlock, blockHash, epochId, epochHash))` as uint256. Available only after publication and `confirmationBlocks` confirmations of the target block.
 
@@ -480,13 +480,13 @@ Views, callable by anyone. Nothing here has a setter except through an upgrade.
 
 | Function | Selector | Meaning | Source |
 | --- | --- | --- | --- |
-| <a id="coordinator-fn-lastservedrequestid"></a>`lastServedRequestId() returns (uint256)` | `0xef54e226` | ID of the most recently accepted request; 0 before the first. | lines 53, 433 |
-| <a id="coordinator-fn-lastservedindex"></a>`lastServedIndex() returns (uint256)` | `0x7e176eed` | Number of accepted requests so far: the `serveIndex` of the latest `RequestServed`. | lines 54, 434 |
-| <a id="coordinator-fn-servedrequestat"></a>`servedRequestAt(uint256) returns (uint256)` | `0xf9a4acc6` | Request ID accepted at a serve index (from 1); 0 for an index not used yet. | lines 55, 434 |
+| <a id="coordinator-fn-lastservedrequestid"></a>`lastServedRequestId() returns (uint256)` | `0xef54e226` | ID of the most recently accepted request; 0 before the first. | lines 53, 435 |
+| <a id="coordinator-fn-lastservedindex"></a>`lastServedIndex() returns (uint256)` | `0x7e176eed` | Number of accepted requests so far: the `serveIndex` of the latest `RequestServed`. | lines 54, 436 |
+| <a id="coordinator-fn-servedrequestat"></a>`servedRequestAt(uint256) returns (uint256)` | `0xf9a4acc6` | Request ID accepted at a serve index (from 1); 0 for an index not used yet. | lines 55, 436 |
 | <a id="coordinator-fn-keyhash"></a>`keyHash() returns (bytes32)` | `0x61728f39` | `keccak256(abi.encode(publicKey))` of the VRF key; indexed in `RandomnessRequested` and `ProofVerified`. | lines 37, 180 |
 | <a id="coordinator-fn-publickeyx"></a>`publicKeyX() returns (uint256)` | `0xfa6df55d` | x coordinate of the VRF public key. | line 35 |
 | <a id="coordinator-fn-publickeyy"></a>`publicKeyY() returns (uint256)` | `0xd7a6f6e8` | y coordinate of the VRF public key. | line 36 |
-| <a id="coordinator-fn-confirmationblocks"></a>`confirmationBlocks() returns (uint16)` | `0x460a58aa` | Blocks after the target block before the seed and proofs become available (1 to 64, set at initialization). | lines 45, 564 |
+| <a id="coordinator-fn-confirmationblocks"></a>`confirmationBlocks() returns (uint16)` | `0x460a58aa` | Blocks after the target block before the seed and proofs become available (1 to 64, set at initialization). | lines 45, 566 |
 | <a id="coordinator-fn-epochregistry"></a>`epochRegistry() returns (address)` | `0x2b12cb69` | The `EpochEntropy` proxy that supplies epochs and the keeper-share recipient. | line 33 |
 | <a id="coordinator-fn-protocolconfigurationhash"></a>`protocolConfigurationHash() returns (bytes32)` | `0x155cf49b` | Hash of the initialized configuration (public key, initial fee recipient, initial minimum fee, confirmations, registry, initial catalog hash, first epoch start, epoch length 200) under `CONFIG_DOMAIN`. Bound into every transcript hash. | lines 32, 190 |
 | <a id="coordinator-fn-initialfeerecipient"></a>`initialFeeRecipient() returns (address)` | `0x308c2d6b` | Fee recipient given to `initialize`, used by replay. The live payout address is `feeRecipient()`. | lines 39, 182 |
@@ -714,7 +714,7 @@ Topic 0 `0x8ae693db98f043f48e8f427375449ed5576aba97575e4f7f93ff2c1f6c75dcb5` · 
 event BlockHashStored(uint256 indexed requestId, uint64 targetBlock, bytes32 blockHash)
 ```
 
-Topic 0 `0x81bc3b4ec75af0fb9ed3521d7c766d8f995d04b0735c17d61ff9d468b0f04911` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash) · Source: `D20VRFCoordinator.sol` lines 144, 570–577
+Topic 0 `0x81bc3b4ec75af0fb9ed3521d7c766d8f995d04b0735c17d61ff9d468b0f04911` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash) · Source: `D20VRFCoordinator.sol` lines 144, 572–579
 
 The target block hash of the request was stored. Emitted once per request: by `storeBlockHash`, or by fulfillment if the hash was not stored before.
 
@@ -724,7 +724,7 @@ The target block hash of the request was stored. Emitted once per request: by `s
 event RequestServed(uint256 indexed requestId, uint256 indexed serveIndex)
 ```
 
-Topic 0 `0x2012511e6cebd578bcabff1ef3346edb032cbab8622e9f23d9f15d7d1037267f` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 160, 433–435
+Topic 0 `0x2012511e6cebd578bcabff1ef3346edb032cbab8622e9f23d9f15d7d1037267f` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 160, 435–437
 
 A proof was accepted. `serveIndex` counts accepted requests from 1 (`lastServedIndex`, `servedRequestAt`).
 
@@ -734,7 +734,7 @@ A proof was accepted. `serveIndex` counts accepted requests from 1 (`lastServedI
 event ProofVerified(uint256 indexed requestId, bytes32 indexed keyHash, uint256 seed, bytes32 proofHash)
 ```
 
-Topic 0 `0x55bb25be3ecd9f68ceae7cdabf4eabe2e0940bd8fc1c26c0d68ad5f7c5d08d22` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 159, 436
+Topic 0 `0x55bb25be3ecd9f68ceae7cdabf4eabe2e0940bd8fc1c26c0d68ad5f7c5d08d22` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 159, 438
 
 Seed and hash of the accepted proof.
 
@@ -744,7 +744,7 @@ Seed and hash of the accepted proof.
 event RandomnessFulfilled(uint256 indexed requestId, bytes32 randomness, address indexed submitter)
 ```
 
-Topic 0 `0x9c82683ee7932041c254d206bcce4241d66a811d53ee7191799cc120777b2b87` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 145, 437
+Topic 0 `0x9c82683ee7932041c254d206bcce4241d66a811d53ee7191799cc120777b2b87` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 145, 439
 
 A proof was accepted and `randomness` is final. `submitter` sent the transaction and is not paid for it.
 
@@ -754,7 +754,7 @@ A proof was accepted and `randomness` is final. `submitter` sent the transaction
 event FulfillmentEvidence(uint256 indexed requestId, bytes32 indexed transcriptHash, bytes packet)
 ```
 
-Topic 0 `0xa121bbea897439460dfb08c3e6d6af064bc1f31e9477471828a87c5596b92e77` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 163–164, 448–452
+Topic 0 `0xa121bbea897439460dfb08c3e6d6af064bc1f31e9477471828a87c5596b92e77` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 163–164, 450–454
 
 The accepted proof as a 416-byte ABI-encoded packet, indexed by `transcriptHash`. Decode it with `decodeEvidencePacket`; take evidence from this log, not from calldata, since a batch carries several proofs.
 
@@ -764,7 +764,7 @@ The accepted proof as a 416-byte ABI-encoded packet, indexed by `transcriptHash`
 event CallbackAttempted(uint256 indexed requestId, bool success, uint32 gasLimit)
 ```
 
-Topic 0 `0x70f64c0739e827900ae6f2e1317601653f4080bc857f423671fc58d5822f1f4a` · Emitted by: [`retryCallback`](#coordinator-fn-retrycallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 146, 611–628
+Topic 0 `0x70f64c0739e827900ae6f2e1317601653f4080bc857f423671fc58d5822f1f4a` · Emitted by: [`retryCallback`](#coordinator-fn-retrycallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 146, 613–630
 
 Result of calling `rawFulfillRandomness` with `gasLimit` gas, at fulfillment and at each `retryCallback`. `success` false means the consumer reverted, ran out of gas or has no code; the word is accepted either way.
 
@@ -774,7 +774,7 @@ Result of calling `rawFulfillRandomness` with `gasLimit` gas, at fulfillment and
 event KeeperFeePaid(uint256 indexed requestId, address indexed keeper, uint256 amount, bool paid)
 ```
 
-Topic 0 `0x7605929b04963e0365f647d9ab12e7ac4aeba5474bb80f1e1554fccad0584683` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 153, 440–445
+Topic 0 `0x7605929b04963e0365f647d9ab12e7ac4aeba5474bb80f1e1554fccad0584683` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 153, 442–447
 
 At acceptance, when the keeper share is non-zero: `amount` went to `keeper`, the submitter when the registry authorizes it and `committer()` otherwise, by a 30,000-gas transfer (`paid` true) or was added to `keeperCredits(keeper)` (`paid` false). Emitted after `CallbackAttempted`.
 
@@ -794,7 +794,7 @@ A batch member was left untouched: `reason` 1 already fulfilled, 2 refunded, 3 p
 event RequestRefundedTo(uint256 indexed requestId, address indexed refundAddress, uint256 amount, bool paid)
 ```
 
-Topic 0 `0x0f6107d218fea62a20553f3700dba7c94dcf653bd2027c0bf1ebe0832f42a506` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest) · Source: `D20VRFCoordinator.sol` lines 155, 486
+Topic 0 `0x0f6107d218fea62a20553f3700dba7c94dcf653bd2027c0bf1ebe0832f42a506` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest) · Source: `D20VRFCoordinator.sol` lines 155, 488
 
 An expired request was refunded: `amount` (`feePaid × requestRefundBps / 10000`) was sent to `refundAddress` (`paid` true) or added to its refund credit (`paid` false).
 
@@ -804,7 +804,7 @@ An expired request was refunded: `amount` (`feePaid × requestRefundBps / 10000`
 event RefundCallbackAttempted(uint256 indexed requestId, address indexed consumer, bool success, uint32 gasLimit)
 ```
 
-Topic 0 `0x88448c9fbcfc67f28f0266e82766e402ccd28115fbb84edb6e5b2597effe83d8` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback) · Source: `D20VRFCoordinator.sol` lines 157, 500–511
+Topic 0 `0x88448c9fbcfc67f28f0266e82766e402ccd28115fbb84edb6e5b2597effe83d8` · Emitted by: [`refundRequest`](#coordinator-fn-refundrequest), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback) · Source: `D20VRFCoordinator.sol` lines 157, 502–513
 
 Result of calling `onRefund(requestId)` on `consumer` with `gasLimit` gas: 100,000 at `refundRequest`, the caller's limit at `retryRefundCallback`.
 
@@ -816,7 +816,7 @@ Result of calling `onRefund(requestId)` on `consumer` with `gasLimit` gas: 100,0
 event RefundCreditWithdrawn(address indexed owner, address indexed recipient, uint256 amount)
 ```
 
-Topic 0 `0x9d520065b24fda0469128acd3f3078de7e43d70ab762aeea8c741bde25070192` · Emitted by: [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit) · Source: `D20VRFCoordinator.sol` lines 156, 522
+Topic 0 `0x9d520065b24fda0469128acd3f3078de7e43d70ab762aeea8c741bde25070192` · Emitted by: [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit) · Source: `D20VRFCoordinator.sol` lines 156, 524
 
 `owner`, the credit holder (not the contract owner), withdrew `amount` of refund credit to `recipient`.
 
@@ -826,7 +826,7 @@ Topic 0 `0x9d520065b24fda0469128acd3f3078de7e43d70ab762aeea8c741bde25070192` · 
 event KeeperCreditWithdrawn(address indexed keeper, address indexed recipient, uint256 amount)
 ```
 
-Topic 0 `0x22f05c41968705c032a86a65f8fda7e64483ea5e6b6b27a920d1fbfab94267ba` · Emitted by: [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit) · Source: `D20VRFCoordinator.sol` lines 154, 544
+Topic 0 `0x22f05c41968705c032a86a65f8fda7e64483ea5e6b6b27a920d1fbfab94267ba` · Emitted by: [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit) · Source: `D20VRFCoordinator.sol` lines 154, 546
 
 `keeper` withdrew `amount` of keeper credit to `recipient`.
 
@@ -836,7 +836,7 @@ Topic 0 `0x22f05c41968705c032a86a65f8fda7e64483ea5e6b6b27a920d1fbfab94267ba` · 
 event FeesWithdrawn(address indexed recipient, uint256 amount)
 ```
 
-Topic 0 `0xc0819c13be868895eb93e40eaceb96de976442fa1d404e5c55f14bb65a8c489a` · Emitted by: [`withdrawFees`](#coordinator-fn-withdrawfees) · Source: `D20VRFCoordinator.sol` lines 147, 533
+Topic 0 `0xc0819c13be868895eb93e40eaceb96de976442fa1d404e5c55f14bb65a8c489a` · Emitted by: [`withdrawFees`](#coordinator-fn-withdrawfees) · Source: `D20VRFCoordinator.sol` lines 147, 535
 
 The fee recipient withdrew `amount` of earned fees to `recipient`.
 
@@ -938,7 +938,7 @@ The caller of a request function has no code: an externally owned account, or a 
 
 #### <a id="coordinator-error-invalidrefundaddress"></a>`InvalidRefundAddress`
 
-`error InvalidRefundAddress()` · Selector `0xe2fe2726` · Source: `D20VRFCoordinator.sol` lines 125, 252, 515
+`error InvalidRefundAddress()` · Selector `0xe2fe2726` · Source: `D20VRFCoordinator.sol` lines 125, 252, 517
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness), [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit).
 
@@ -948,7 +948,7 @@ A request named the zero address as refund address, or `withdrawRefundCredit` na
 
 #### <a id="coordinator-error-invalidcallbackgas"></a>`InvalidCallbackGas`
 
-`error InvalidCallbackGas()` · Selector `0x35883c54` · Source: `D20VRFCoordinator.sol` lines 113, 460, 496, 607–609
+`error InvalidCallbackGas()` · Selector `0x35883c54` · Source: `D20VRFCoordinator.sol` lines 113, 462, 498, 609–611
 
 **Raised by:** [`requestRandomness`](#coordinator-fn-requestrandomness), [`requestMappedRandomness`](#coordinator-fn-requestmappedrandomness), [`retryCallback`](#coordinator-fn-retrycallback), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback).
 
@@ -1000,7 +1000,7 @@ The request block is before the registry's first epoch: `epochForBlock(block.num
 
 #### <a id="coordinator-error-unknownrequest"></a>`UnknownRequest`
 
-`error UnknownRequest()` · Selector `0x6d080297` · Source: `D20VRFCoordinator.sol` lines 114, 547–550
+`error UnknownRequest()` · Selector `0x6d080297` · Source: `D20VRFCoordinator.sol` lines 114, 549–552
 
 **Raised by:** [`getRequest`](#coordinator-fn-getrequest), [`getMapping`](#coordinator-fn-getmapping), [`getMappedResult`](#coordinator-fn-getmappedresult), [`requestFeePaid`](#coordinator-fn-requestfeepaid), [`requestRefundBps`](#coordinator-fn-requestrefundbps), [`refundRequest`](#coordinator-fn-refundrequest), [`retryCallback`](#coordinator-fn-retrycallback), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof), [`requestSeed`](#coordinator-fn-requestseed), [`getProofContext`](#coordinator-fn-getproofcontext).
 
@@ -1010,7 +1010,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-notfulfilled"></a>`NotFulfilled`
 
-`error NotFulfilled()` · Selector `0x07bc6c3e` · Source: `D20VRFCoordinator.sol` lines 118, 347, 457
+`error NotFulfilled()` · Selector `0x07bc6c3e` · Source: `D20VRFCoordinator.sol` lines 118, 347, 459
 
 **Raised by:** [`getMappedResult`](#coordinator-fn-getmappedresult), [`retryCallback`](#coordinator-fn-retrycallback).
 
@@ -1020,7 +1020,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-alreadydelivered"></a>`AlreadyDelivered`
 
-`error AlreadyDelivered()` · Selector `0xb9f79653` · Source: `D20VRFCoordinator.sol` lines 119, 458
+`error AlreadyDelivered()` · Selector `0xb9f79653` · Source: `D20VRFCoordinator.sol` lines 119, 460
 
 **Raised by:** [`retryCallback`](#coordinator-fn-retrycallback).
 
@@ -1030,7 +1030,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-refundnotavailable"></a>`RefundNotAvailable`
 
-`error RefundNotAvailable()` · Selector `0x0b4d6981` · Source: `D20VRFCoordinator.sol` lines 128, 469
+`error RefundNotAvailable()` · Selector `0x0b4d6981` · Source: `D20VRFCoordinator.sol` lines 128, 471
 
 **Raised by:** [`refundRequest`](#coordinator-fn-refundrequest).
 
@@ -1040,7 +1040,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-notrefunded"></a>`NotRefunded`
 
-`error NotRefunded()` · Selector `0xfae7079c` · Source: `D20VRFCoordinator.sol` lines 131, 493
+`error NotRefunded()` · Selector `0xfae7079c` · Source: `D20VRFCoordinator.sol` lines 131, 495
 
 **Raised by:** [`retryRefundCallback`](#coordinator-fn-retryrefundcallback).
 
@@ -1050,7 +1050,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-refundcallbackalreadydelivered"></a>`RefundCallbackAlreadyDelivered`
 
-`error RefundCallbackAlreadyDelivered()` · Selector `0x6502f8ae` · Source: `D20VRFCoordinator.sol` lines 132, 494
+`error RefundCallbackAlreadyDelivered()` · Selector `0x6502f8ae` · Source: `D20VRFCoordinator.sol` lines 132, 496
 
 **Raised by:** [`retryRefundCallback`](#coordinator-fn-retryrefundcallback).
 
@@ -1060,7 +1060,7 @@ No request has this ID: 0, or not below `nextRequestId()`. An unknown ID also re
 
 #### <a id="coordinator-error-insufficientcallbackgas"></a>`InsufficientCallbackGas`
 
-`error InsufficientCallbackGas()` · Selector `0xa2c23f0d` · Source: `D20VRFCoordinator.sol` lines 122, 478, 503, 619–620
+`error InsufficientCallbackGas()` · Selector `0xa2c23f0d` · Source: `D20VRFCoordinator.sol` lines 122, 480, 505, 621–622
 
 **Raised by:** [`refundRequest`](#coordinator-fn-refundrequest), [`retryCallback`](#coordinator-fn-retrycallback), [`retryRefundCallback`](#coordinator-fn-retryrefundcallback), [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch).
 
@@ -1072,7 +1072,7 @@ Too little gas remained to forward the full callback budget and keep the coordin
 
 #### <a id="coordinator-error-norefundcredit"></a>`NoRefundCredit`
 
-`error NoRefundCredit()` · Selector `0x1d59da8e` · Source: `D20VRFCoordinator.sol` lines 129, 517
+`error NoRefundCredit()` · Selector `0x1d59da8e` · Source: `D20VRFCoordinator.sol` lines 129, 519
 
 **Raised by:** [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit).
 
@@ -1082,7 +1082,7 @@ Too little gas remained to forward the full callback budget and keep the coordin
 
 #### <a id="coordinator-error-transferfailed"></a>`TransferFailed`
 
-`error TransferFailed()` · Selector `0x90b8ec18` · Source: `D20VRFCoordinator.sol` lines 124, 521, 532, 543
+`error TransferFailed()` · Selector `0x90b8ec18` · Source: `D20VRFCoordinator.sol` lines 124, 523, 534, 545
 
 **Raised by:** [`withdrawRefundCredit`](#coordinator-fn-withdrawrefundcredit), [`withdrawFees`](#coordinator-fn-withdrawfees), [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit).
 
@@ -1092,7 +1092,7 @@ The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCred
 
 #### <a id="coordinator-error-onlyfeerecipient"></a>`OnlyFeeRecipient`
 
-`error OnlyFeeRecipient()` · Selector `0x07d8ed3d` · Source: `D20VRFCoordinator.sol` lines 123, 527
+`error OnlyFeeRecipient()` · Selector `0x07d8ed3d` · Source: `D20VRFCoordinator.sol` lines 123, 529
 
 **Raised by:** [`withdrawFees`](#coordinator-fn-withdrawfees).
 
@@ -1102,7 +1102,7 @@ The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCred
 
 #### <a id="coordinator-error-nokeepercredit"></a>`NoKeeperCredit`
 
-`error NoKeeperCredit()` · Selector `0x0d106640` · Source: `D20VRFCoordinator.sol` lines 130, 539
+`error NoKeeperCredit()` · Selector `0x0d106640` · Source: `D20VRFCoordinator.sol` lines 130, 541
 
 **Raised by:** [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit).
 
@@ -1114,7 +1114,7 @@ The `recipient` of `withdrawRefundCredit`, `withdrawFees` or `withdrawKeeperCred
 
 #### <a id="coordinator-error-notready"></a>`NotReady`
 
-`error NotReady()` · Selector `0x9488aaa6` · Source: `D20VRFCoordinator.sol` lines 115, 564
+`error NotReady()` · Selector `0x9488aaa6` · Source: `D20VRFCoordinator.sol` lines 115, 566
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof), [`requestSeed`](#coordinator-fn-requestseed), [`getProofContext`](#coordinator-fn-getproofcontext).
 
@@ -1124,7 +1124,7 @@ The request cannot be proven yet: its epoch packet is not published, or `block.n
 
 #### <a id="coordinator-error-blockhashunavailable"></a>`BlockHashUnavailable`
 
-`error BlockHashUnavailable()` · Selector `0xbfc9f0d3` · Source: `D20VRFCoordinator.sol` lines 116, 567
+`error BlockHashUnavailable()` · Selector `0xbfc9f0d3` · Source: `D20VRFCoordinator.sol` lines 116, 569
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`storeBlockHash`](#coordinator-fn-storeblockhash), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof), [`requestSeed`](#coordinator-fn-requestseed), [`getProofContext`](#coordinator-fn-getproofcontext).
 
@@ -1164,7 +1164,7 @@ The target block hash was never stored and is outside the 256-block `BLOCKHASH` 
 
 #### <a id="coordinator-error-wrongpublickey"></a>`WrongPublicKey`
 
-`error WrongPublicKey()` · Selector `0x2b0bb68e` · Source: `D20VRFCoordinator.sol` lines 120, 592
+`error WrongPublicKey()` · Selector `0x2b0bb68e` · Source: `D20VRFCoordinator.sol` lines 120, 594
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof).
 
@@ -1174,7 +1174,7 @@ The proof's `pk` is not the coordinator's VRF key.
 
 #### <a id="coordinator-error-wrongseed"></a>`WrongSeed`
 
-`error WrongSeed()` · Selector `0xf36cbea4` · Source: `D20VRFCoordinator.sol` lines 121, 594
+`error WrongSeed()` · Selector `0xf36cbea4` · Source: `D20VRFCoordinator.sol` lines 121, 596
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch), [`verifyRequestProof`](#coordinator-fn-verifyrequestproof).
 
@@ -1184,7 +1184,7 @@ The proof's `seed` differs from `requestSeed(requestId)`.
 
 #### <a id="coordinator-error-evidencepackettoolarge"></a>`EvidencePacketTooLarge`
 
-`error EvidencePacketTooLarge()` · Selector `0xcfbc3ebf` · Source: `D20VRFCoordinator.sol` lines 134, 450
+`error EvidencePacketTooLarge()` · Selector `0xcfbc3ebf` · Source: `D20VRFCoordinator.sol` lines 134, 452
 
 **Raised by:** [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch).
 
@@ -1216,7 +1216,7 @@ The encoded proof exceeds `MAX_EVIDENCE_PACKET_BYTES`. A proof always encodes to
 
 #### <a id="coordinator-error-invalidconfig"></a>`InvalidConfig`
 
-`error InvalidConfig()` · Selector `0x35be3ac8` · Source: `D20VRFCoordinator.sol` lines 108, 174–175, 198, 202, 207, 216, 528, 537
+`error InvalidConfig()` · Selector `0x35be3ac8` · Source: `D20VRFCoordinator.sol` lines 108, 174–175, 198, 202, 207, 216, 530, 539
 
 **Raised by:** [`withdrawFees`](#coordinator-fn-withdrawfees), [`withdrawKeeperCredit`](#coordinator-fn-withdrawkeepercredit), [`setPricing`](#coordinator-fn-setpricing), [`setRefundBps`](#coordinator-fn-setrefundbps), [`setKeeperFeeBps`](#coordinator-fn-setkeeperfeebps), [`setFeeRecipient`](#coordinator-fn-setfeerecipient), [`initialize`](#coordinator-fn-initialize).
 

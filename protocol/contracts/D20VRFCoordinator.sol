@@ -419,8 +419,10 @@ contract D20VRFCoordinator is VRF, ReentrancyGuard, ID20VRF, Ownable2StepUpgrade
         r.fulfilled = true;
         // Submission stays open to anyone. The keeper share goes to the submitter when the registry authorizes it to
         // publish epochs (the committer or an allowed backup committer, such as a follower keeper), so each keeper
-        // earns what it serves; any other submitter's fulfillment pays committer(), as before. A registry without the
-        // view, or one whose call reverts, also pays committer(): the share is never skipped.
+        // earns what it serves; any other submitter's fulfillment pays committer(), as before. A registry that reverts
+        // the call, including one whose implementation has no such function, pays committer() instead of skipping the
+        // share. Return data that does not decode as a bool is not caught and would revert the fulfillment; the
+        // registry is the same owner-upgraded contract this request's epoch came from.
         address keeper = epochRegistry.committer();
         if (msg.sender != keeper) {
             try epochRegistry.isAuthorizedCommitter(msg.sender) returns (bool authorized) {

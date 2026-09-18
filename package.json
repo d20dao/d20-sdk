@@ -1,7 +1,7 @@
 {
   "name": "@d20dao/vrf-sdk",
   "version": "0.4.0",
-  "description": "D20DAO verifiable randomness: Solidity consumer helpers, contract ABIs and public proof replay",
+  "description": "Verifiable randomness (VRF) for onchain apps: Solidity consumers, contract ABIs, USDC fee quotes and public proof replay. Live on Arc.",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
@@ -76,5 +76,29 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/d20dao/d20-sdk.git"
-  }
+  },
+  "homepage": "https://d20dao.org",
+  "bugs": {
+    "url": "https://github.com/d20dao/d20-sdk/issues"
+  },
+  "keywords": [
+    "vrf",
+    "verifiable-random-function",
+    "verifiable-randomness",
+    "randomness",
+    "random-number",
+    "rng",
+    "oracle",
+    "arc",
+    "arc-network",
+    "usdc",
+    "solidity",
+    "smart-contracts",
+    "evm",
+    "ethers",
+    "onchain",
+    "dice",
+    "raffle",
+    "d20dao"
+  ]
 }

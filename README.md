@@ -32,7 +32,8 @@ For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.
 7. **Never re-roll a result you dislike.** The word is final once `fulfilled` is true. Re-requesting after seeing an outcome is the one thing verifiable randomness cannot protect your users from, and the evidence trail makes it visible.
 8. **Never use `blockhash` or `block.timestamp` as randomness.** Both are chosen by whoever builds the block, and `blockhash` is only available for the last 256 blocks. That is the problem this service exists to solve.
 9. **Withdraw the refund credit your fee buffer leaves behind.** Anything above the escrowed quote is credited to the refund address (`FeeOverpaymentCredited`), readable with `refundCredits(address)` and pulled with `withdrawRefundCredit(recipient)`. Returning the change in the requesting transaction, as `DiceConsumer` does, avoids the second transaction entirely.
-10. **Freeze any list before you request an index into it.** `chooseOne`, `chooseMany` and `shuffle` answer with indices. Commit the list — hashing it into `clientSeed` puts the commitment in the request log, as `RaffleConsumer` does.
+10. **Close bets and entries when you request.** No one can predict the word before the keeper submits it, but the pending fulfillment transaction reveals it about one block before it lands. Anything the result decides — stakes, entries, choices — must be fixed in the requesting transaction and unchangeable until the callback, as `RaffleConsumer` does when it closes entries at the draw.
+11. **Freeze any list before you request an index into it.** `chooseOne`, `chooseMany` and `shuffle` answer with indices. Commit the list — hashing it into `clientSeed` puts the commitment in the request log, as `RaffleConsumer` does.
 
 ## Networks
 

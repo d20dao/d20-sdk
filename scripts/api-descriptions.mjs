@@ -339,7 +339,7 @@ export const references = [
           fulfillRandomness: {
             caller: 'Anyone',
             src: '389-397, 413-448',
-            text: 'Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) to `committer()` with 30,000 gas, or records it as keeper credit. A failing callback does not revert the fulfillment.',
+            text: 'Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) with 30,000 gas to the submitting wallet when the registry answers `isAuthorizedCommitter` true for it (the committer or an allowed backup committer) and to `committer()` otherwise, or records it as that wallet\'s keeper credit; a registry call that reverts also pays `committer()`. A failing callback does not revert the fulfillment.',
             emits: ['BlockHashStored', 'RequestServed', 'ProofVerified', 'RandomnessFulfilled', 'FulfillmentEvidence', 'CallbackAttempted', 'KeeperFeePaid'],
             errors: ['UnknownRequest', 'AlreadyFulfilled', 'RequestRefunded', 'RequestExpired', 'NotReady', 'BlockHashUnavailable', 'WrongPublicKey', 'WrongSeed', 'EvidencePacketTooLarge', 'InsufficientCallbackGas'],
           },
@@ -496,7 +496,7 @@ export const references = [
           },
           RandomnessFulfilled: {
             src: '145, 439',
-            text: 'A proof was accepted and `randomness` is final. `submitter` sent the transaction and is not paid for it.',
+            text: 'A proof was accepted and `randomness` is final. `submitter` sent the transaction; `KeeperFeePaid` names the wallet that received the keeper share, which is `submitter` only when the registry authorizes it.',
           },
           FulfillmentEvidence: {
             src: '163-164, 450-454',
@@ -831,7 +831,7 @@ export const references = [
         intro: 'Views, callable by anyone.',
         items: {
           firstEpochStart: { src: '40, 83', text: 'First block of epoch 1: the initialization block plus 200.' },
-          committer: { src: '39, 281', text: 'Primary publishing address. The coordinator pays it the keeper share of every request whose proof came from a wallet this registry does not authorize.' },
+          committer: { src: '39, 281', text: 'Primary publishing address. The coordinator pays it the keeper share of the requests it serves itself and of every request whose proof came from a wallet this registry does not authorize.' },
           isBackupCommitter: { src: '118', text: 'Whether an address may publish epochs besides `committer()`.' },
           isAuthorizedCommitter: { src: '119-121', text: 'Whether an address may publish epochs at all: `committer()` or an allowed backup committer. The coordinator reads it to decide whether a proof submitter earns the keeper share.' },
           backupCommitterCount: { src: '63, 107-117', text: 'Number of allowed backup committers, at most `MAX_BACKUP_COMMITTERS`.' },
@@ -879,7 +879,7 @@ export const references = [
           commitEpoch: {
             caller: 'Committer or backup committer',
             src: '274, 280-300',
-            text: 'Publishes the packet of the selected source once per epoch, from the epoch start: checks that the attestation is not future-dated and at most 240 seconds old, that its data matches the data template of the slot\'s recipe exactly, and that the slot\'s signer in the epoch\'s catalog signed it. Stores the record and emits the packet. Whoever publishes, the keeper share of the epoch\'s requests goes to `committer()`.',
+            text: 'Publishes the packet of the selected source once per epoch, from the epoch start: checks that the attestation is not future-dated and at most 240 seconds old, that its data matches the data template of the slot\'s recipe exactly, and that the slot\'s signer in the epoch\'s catalog signed it. Stores the record and emits the packet. Publishing earns nothing by itself: the keeper share of each request goes to the authorized wallet that submits its accepted proof, or to `committer()` when the submitter is not authorized.',
             emits: ['EpochCommitted'],
             errors: ['OnlyCommitter', 'AlreadyCommitted', 'InvalidEpoch', 'FallbackNotOpen', 'AnchorUnavailable', 'InvalidConfig', 'InvalidTime', 'InvalidData', 'ECDSAInvalidSignatureLength', 'ECDSAInvalidSignatureS', 'ECDSAInvalidSignature', 'InvalidSigner', 'PacketTooLarge'],
           },
@@ -991,7 +991,7 @@ export const references = [
       {
         title: 'Administration and upgrades',
         items: {
-          CommitterChanged: { src: '72, 102', text: 'New primary publishing address and keeper-share recipient.' },
+          CommitterChanged: { src: '72, 102', text: 'New primary publishing address; it also receives the keeper share of proofs submitted by wallets the registry does not authorize.' },
           BackupCommitterSet: { src: '75, 116', text: '`account` may now publish epochs (`allowed` true) or no longer may (`allowed` false).' },
           ...ownershipEvents,
           Initialized: {

@@ -4,7 +4,7 @@
 
 `@d20dao/vrf-sdk` is everything you need on the application side: the Solidity base contract your consumer inherits, the coordinator ABI, an off-chain fee quote for your front end, and the replay code that re-derives a published result from public evidence. It holds no keys and runs no service.
 
-The service is live on **Arc Mainnet** (chain 5042); develop against **Arc Testnet** (chain 5042002). Requests are permissionless — no allowlist, no subscription, no upfront deposit — but they must come from a contract, so a wallet or backend pays through its own consumer. Each request pays a fee quoted from the current base fee, a fraction of a USDC at typical gas prices (see [Pricing](#pricing)), and is served within 60 seconds or refunded.
+The service is live on **Arc Mainnet** (chain 5042); develop against **Arc Testnet** (chain 5042002). Requests are permissionless — no allowlist, no subscription, no upfront deposit — but they must come from a contract, so a wallet or backend pays through its own consumer. Each request pays a fee quoted from the current base fee, a fraction of a USDC at typical gas prices (see [Pricing](#pricing)), and is served within 60 seconds or can be refunded.
 
 ## Start here
 
@@ -12,7 +12,7 @@ The service is live on **Arc Mainnet** (chain 5042); develop against **Arc Testn
 npm install @d20dao/vrf-sdk
 ```
 
-1. **Copy an example.** [`examples/DiceConsumer.sol`](examples/DiceConsumer.sol) rolls a d20, [`examples/RaffleConsumer.sol`](examples/RaffleConsumer.sol) picks one winner from a list, [`examples/LootDropConsumer.sol`](examples/LootDropConsumer.sol) makes a weighted drop. Each is about sixty lines and stands alone.
+1. **Copy an example.** [`examples/DiceConsumer.sol`](examples/DiceConsumer.sol) rolls a d20, [`examples/RaffleConsumer.sol`](examples/RaffleConsumer.sol) picks one winner from a list, [`examples/LootDropConsumer.sol`](examples/LootDropConsumer.sol) makes a weighted drop. Each is sixty to seventy lines and stands alone.
 2. **Compile it.** Node 22.13+, solc 0.8.28, `evmVersion: cancun`. Hardhat and Foundry settings are in [Compiler setup](#compiler-setup).
 3. **Deploy it** against the coordinator proxy for your chain, from [Deployments](#deployments). There is no default network; configure the address explicitly.
 4. **Request and read.** Quote the fee off-chain, send it through your consumer, take `requestId` from the receipt and poll until `fulfilled` — or until the 60-second deadline passes and you refund. See [Paying for a request](#paying-for-a-request) and [Reading results](#reading-results).
@@ -25,7 +25,7 @@ For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.
 
 1. **Quote with `quoteFeeAt(callbackGasLimit, block.baseFeePerGas)` plus a buffer, never through `eth_call`.** `eth_call` reports a base fee of 0, so `quoteFee` collapses to the minimum fee and the real transaction reverts with `IncorrectFee`. Inside the requesting transaction `quoteFee(callbackGasLimit)` is exact; off-chain, use `quoteRequestFee` or `quoteFeeAt` with the latest header's base fee and a buffer for the movement until inclusion.
 2. **Requests come from a contract, never an EOA.** A wallet call reverts with `ContractConsumerRequired`. The consumer is what the coordinator calls back, so it has to exist before the request.
-3. **Keep the callback small: store the result, do the work later.** It runs inside `callbackGasLimit` and its failure is not free to you in attention, even though the request is still served and paid. A failed callback is retried by anyone with `retryCallback(requestId, gasLimit)`, which redelivers the same accepted word — so the callback must be safe to run more than once.
+3. **Keep the callback small: store the result, do the work later.** It runs inside `callbackGasLimit`. If it reverts or runs out of gas, its state changes are rolled back while the request stays served and paid, and anyone can redeliver the same accepted word with `retryCallback(requestId, gasLimit)`, with more gas if needed. A delivery that succeeded is never repeated, but still refuse a request id you have already finished: the check costs one read and does not depend on the coordinator.
 4. **Map each request id to your own context, and reject anything else.** Record who asked and what for when you request, then in the callback refuse a request id you never issued and one you have already finished.
 5. **Derive many values from one word instead of making many requests.** One request buys 256 bits. Ask for `diceRoll(sides, count)`, `chooseMany` or `shuffle` and the coordinator maps them for you; for application-specific values, `keccak256(abi.encode(word, i))` gives an independent value per `i`. A second request costs a second fee and a second wait.
 6. **Handle expiry, and choose the refund address deliberately.** If no proof is accepted within 60 seconds the request expires: nothing is fulfilled late, and anyone may call `refundRequest(requestId)`. The refund is pushed to the address fixed at request time, so pick one that can receive a plain native transfer or call `withdrawRefundCredit` — usually the paying user.
@@ -89,13 +89,13 @@ With either tool, `import {D20VRFConsumer} from "@d20dao/vrf-sdk/contracts/D20VR
 
 ### Examples
 
-Three complete consumers ship in the package and install as `@d20dao/vrf-sdk/examples/<name>.sol`. Each is about sixty lines, deals with one idea and is meant to be copied and edited rather than imported. All three take the coordinator proxy in their constructor, authenticate the callback through `D20VRFConsumer`, refuse a request id they did not issue or have already finished, and read their outcome from `getMappedResult` instead of recomputing it.
+Three complete consumers ship in the package and install as `@d20dao/vrf-sdk/examples/<name>.sol`. Each is sixty to seventy lines, deals with one idea and is meant to be copied and edited rather than imported. All three take the coordinator proxy in their constructor, authenticate the callback through `D20VRFConsumer`, refuse a request id they did not issue or have already finished, and read their outcome from `getMappedResult` instead of recomputing it.
 
 | Example | What it shows |
 | --- | --- |
 | [`DiceConsumer.sol`](examples/DiceConsumer.sol) | One d20 per player. Reads the exact `quoteFee` inside the requesting transaction, pays it, returns the change and names the player as the refund address. |
-| [`RaffleConsumer.sol`](examples/RaffleConsumer.sol) | One winner from a list. Closes entry before requesting, hashes the frozen list into `clientSeed` as an on-chain commitment and maps the winning index with `ChooseOne`. |
-| [`LootDropConsumer.sol`](examples/LootDropConsumer.sol) | A weighted drop. Asks for a `NumberRange` draw instead of taking a biased modulo of the word, stores the word in the callback and walks the weights on read. |
+| [`RaffleConsumer.sol`](examples/RaffleConsumer.sol) | One winner from a list. Closes entry before requesting, hashes the frozen list into `clientSeed` as an on-chain commitment, maps the winning index with `ChooseOne` and, through `_onRefund`, lets the draw be sent again only after an expired request was refunded. |
+| [`LootDropConsumer.sol`](examples/LootDropConsumer.sol) | A weighted drop. Asks for a `NumberRange` draw over the total weight instead of reducing the word itself, stores the word in the callback and walks the weights on read. |
 
 - [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp: a consumer with one function per randomness option that stores the latest results onchain, and a single-page UI that requests, waits for and displays them. It runs on Arc Mainnet at https://mainnet-demo.d20dao.org.
 - `skills/d20-consumer/assets/RandomnessConsumer.sol` in [d20dao/skills](https://github.com/d20dao/skills) shows raw, mapped and shuffle requests in one contract, with refund notification and refund-credit withdrawal.
@@ -289,7 +289,7 @@ The keeper may fulfill up to 16 prepared requests in one transaction with `fulfi
 
 ## Optional refund notification
 
-After `refundRequest` has paid the fixed refund address or recorded its refund credit, the coordinator calls `onRefund(requestId)` on the original consumer. Extend `D20VRFConsumer` and override `_onRefund(uint256 requestId)` to update application state; the base authenticates the coordinator. The callback only carries the request ID and does not imply that the consumer itself received money. Application assets and fees remain the application's responsibility.
+After `refundRequest` has paid the fixed refund address or recorded its refund credit, the coordinator calls `onRefund(requestId)` on the original consumer. Extend `D20VRFConsumer` and override `_onRefund(uint256 requestId)` to update application state, as `RaffleConsumer` does to allow a new draw; the base authenticates the coordinator. The callback only carries the request ID and does not imply that the consumer itself received money. Application assets and fees remain the application's responsibility.
 
 The first attempt forwards 100,000 gas. A reverting or gas-exhausting hook cannot undo the fee settlement. After failure, `retryRefundCallback(requestId, gasLimit)` retries the notification without another payment; successful delivery is recorded by `refundCallbackDelivered(requestId)`. Refund/retry needs sufficient outer gas (see [Gas for refund and retry calls](#gas-for-refund-and-retry-calls)). Never request new randomness from within either callback; use a separate application transaction.
 
@@ -326,7 +326,7 @@ Epoch sources are recipes in an owner-managed, append-only registry in `EpochEnt
 | 4 | Nodary | `latestFeeds`, name ETH/USD | `{"ETH/USD":{"value":<number>,"timestamp":<13 digits>,"category":"crypto"}}` |
 | 5 | dRPC | as recipe 1 on Base | as recipe 1 |
 
-Both networks now draw from a five-source catalog, `[0, 1, 2, 4, 5]`: Hyperliquid BTC day volume, the dRPC Ethereum block hash, TickerLayer BTCUSD, Nodary ETH/USD and the dRPC Base block hash. Arc Testnet is already on it; Arc Mainnet switches at epoch 848 on 2026-09-18. Read the catalog an epoch actually used from `catalogAt(epochId)` rather than assuming this one.
+Both networks now draw from a five-source catalog, `[0, 1, 2, 4, 5]`: Hyperliquid BTC day volume, the dRPC Ethereum block hash, TickerLayer BTCUSD, Nodary ETH/USD and the dRPC Base block hash: Arc Testnet from epoch 966 and Arc Mainnet from epoch 848. Read the catalog an epoch actually used from `catalogAt(epochId)` rather than assuming this one.
 
 `BUILTIN_EPOCH_RECIPES` (from `@d20dao/vrf-sdk/epoch`) holds these definitions, and replay uses them unless the catalog carries a `recipeBook`. For any other recipe, put its definition in `epoch.catalog.recipeBook`: `readEpochRecipes(provider, registry, ids)` reads `getRecipe` and checks each query hash, or rebuild it from `RecipeRegistered` logs. Replay checks every definition it uses: the committed packet must carry the recipe's canonical request and the signed data must match its template.
 

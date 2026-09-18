@@ -22,9 +22,9 @@ contract LootDropConsumer is D20VRFConsumer {
     constructor(address coordinator) D20VRFConsumer(coordinator) {}
 
     function open() external payable returns (uint256 requestId) {
-        // One draw in [1, TOTAL_WEIGHT]. The coordinator samples that range by rejecting the short residue
-        // rather than taking uint256(word) % TOTAL_WEIGHT, which would quietly favour the low tiers. Asking
-        // for the range you actually want is what makes the weights below mean what they say.
+        // One draw in [1, TOTAL_WEIGHT]. The coordinator samples the range without modulo bias and stores the
+        // mapping with the request, so the draw is read back from getMappedResult and anyone can replay it.
+        // Asking for the range you actually want is what makes the weights below mean what they say.
         RandomnessMapping.Spec memory spec =
             RandomnessMapping.Spec(RandomnessMapping.Operation.NumberRange, 1, TOTAL_WEIGHT, 1, 0);
         // Forwards everything sent: the coordinator keeps exactly its quote for this transaction, reverts

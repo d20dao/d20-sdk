@@ -392,7 +392,7 @@ function fulfillRandomness(uint256 requestId, VRF.Proof proof) external
 
 Selector `0xef7c2b19` · Caller: Anyone · Source: `D20VRFCoordinator.sol` lines 389–397, 413–448
 
-Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) to `committer()` with 30,000 gas, or records it as keeper credit. A failing callback does not revert the fulfillment.
+Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. Stores the target block hash if needed, verifies the proof against `requestSeed(requestId)`, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It then sends the keeper share (`keeperFeeBps` of `feePaid`) with 30,000 gas to the submitting wallet when the registry answers `isAuthorizedCommitter` true for it (the committer or an allowed backup committer) and to `committer()` otherwise, or records it as that wallet's keeper credit; a registry call that reverts also pays `committer()`. A failing callback does not revert the fulfillment.
 
 **Emits:** [`BlockHashStored`](#coordinator-event-blockhashstored), [`RequestServed`](#coordinator-event-requestserved), [`ProofVerified`](#coordinator-event-proofverified), [`RandomnessFulfilled`](#coordinator-event-randomnessfulfilled), [`FulfillmentEvidence`](#coordinator-event-fulfillmentevidence), [`CallbackAttempted`](#coordinator-event-callbackattempted), [`KeeperFeePaid`](#coordinator-event-keeperfeepaid).
 
@@ -746,7 +746,7 @@ event RandomnessFulfilled(uint256 indexed requestId, bytes32 randomness, address
 
 Topic 0 `0x9c82683ee7932041c254d206bcce4241d66a811d53ee7191799cc120777b2b87` · Emitted by: [`fulfillRandomness`](#coordinator-fn-fulfillrandomness), [`fulfillRandomnessBatch`](#coordinator-fn-fulfillrandomnessbatch) · Source: `D20VRFCoordinator.sol` lines 145, 439
 
-A proof was accepted and `randomness` is final. `submitter` sent the transaction and is not paid for it.
+A proof was accepted and `randomness` is final. `submitter` sent the transaction; `KeeperFeePaid` names the wallet that received the keeper share, which is `submitter` only when the registry authorizes it.
 
 #### <a id="coordinator-event-fulfillmentevidence"></a>`FulfillmentEvidence`
 
@@ -1504,7 +1504,7 @@ Views, callable by anyone.
 | Function | Selector | Meaning | Source |
 | --- | --- | --- | --- |
 | <a id="registry-fn-firstepochstart"></a>`firstEpochStart() returns (uint64)` | `0x219f2428` | First block of epoch 1: the initialization block plus 200. | lines 40, 83 |
-| <a id="registry-fn-committer"></a>`committer() returns (address)` | `0x5bc8e8f9` | Primary publishing address. The coordinator pays it the keeper share of every request whose proof came from a wallet this registry does not authorize. | lines 39, 281 |
+| <a id="registry-fn-committer"></a>`committer() returns (address)` | `0x5bc8e8f9` | Primary publishing address. The coordinator pays it the keeper share of the requests it serves itself and of every request whose proof came from a wallet this registry does not authorize. | lines 39, 281 |
 | <a id="registry-fn-isbackupcommitter"></a>`isBackupCommitter(address account) returns (bool)` | `0x1d97e417` | Whether an address may publish epochs besides `committer()`. | line 118 |
 | <a id="registry-fn-isauthorizedcommitter"></a>`isAuthorizedCommitter(address account) returns (bool)` | `0x1579ab83` | Whether an address may publish epochs at all: `committer()` or an allowed backup committer. The coordinator reads it to decide whether a proof submitter earns the keeper share. | lines 119–121 |
 | <a id="registry-fn-backupcommittercount"></a>`backupCommitterCount() returns (uint256)` | `0xa815c5bf` | Number of allowed backup committers, at most `MAX_BACKUP_COMMITTERS`. | lines 63, 107–117 |
@@ -1585,7 +1585,7 @@ function commitEpoch(uint64 epochId, EpochEntropy.Attestation a) external
 
 Selector `0xb1580277` · Caller: Committer or backup committer · Source: `EpochEntropy.sol` lines 274, 280–300
 
-Publishes the packet of the selected source once per epoch, from the epoch start: checks that the attestation is not future-dated and at most 240 seconds old, that its data matches the data template of the slot's recipe exactly, and that the slot's signer in the epoch's catalog signed it. Stores the record and emits the packet. Whoever publishes, the keeper share of the epoch's requests goes to `committer()`.
+Publishes the packet of the selected source once per epoch, from the epoch start: checks that the attestation is not future-dated and at most 240 seconds old, that its data matches the data template of the slot's recipe exactly, and that the slot's signer in the epoch's catalog signed it. Stores the record and emits the packet. Publishing earns nothing by itself: the keeper share of each request goes to the authorized wallet that submits its accepted proof, or to `committer()` when the submitter is not authorized.
 
 **Emits:** [`EpochCommitted`](#registry-event-epochcommitted).
 
@@ -1849,7 +1849,7 @@ event CommitterChanged(address indexed previousCommitter, address indexed newCom
 
 Topic 0 `0x3f67cc70f736070aaac75db90cef1ab4047521b73e8a38d02852e8bf1a91e7e0` · Emitted by: [`setCommitter`](#registry-fn-setcommitter) · Source: `EpochEntropy.sol` lines 72, 102
 
-New primary publishing address and keeper-share recipient.
+New primary publishing address; it also receives the keeper share of proofs submitted by wallets the registry does not authorize.
 
 #### <a id="registry-event-backupcommitterset"></a>`BackupCommitterSet`
 

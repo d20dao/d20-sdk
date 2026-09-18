@@ -10,6 +10,7 @@ contract RaffleConsumer is D20VRFConsumer {
     uint32 private constant CALLBACK_GAS = 100_000;
 
     address[] public entrants;
+    /// The outstanding or served request: zero before the first draw, and zero again once an expired one was refunded.
     uint256 public drawId;
     bytes32 public word;
     bool public closed; bool public drawn;
@@ -17,6 +18,7 @@ contract RaffleConsumer is D20VRFConsumer {
     error AlreadyClosed();
     error NoEntrants();
     error RaffleFull();
+    error AlreadyDrawn();
     error UnexpectedCallback();
     error NotDrawn();
 
@@ -30,8 +32,9 @@ contract RaffleConsumer is D20VRFConsumer {
     }
 
     function draw() external payable {
-        // A raffle that can be drawn twice is not a raffle. One request, one winner, no second attempt.
-        if (closed) revert AlreadyClosed();
+        // A raffle that can be drawn twice is not a raffle: one served request, one winner, and no second
+        // request while one is outstanding or after one was served.
+        if (drawId != 0) revert AlreadyDrawn();
         if (entrants.length == 0) revert NoEntrants();
         closed = true;
         // The answer is an index, so the list must be frozen before the request goes out; hashing it into the
@@ -45,13 +48,20 @@ contract RaffleConsumer is D20VRFConsumer {
     }
 
     function _fulfillRandomness(uint256 requestId, bytes32 randomness) internal override {
-        // Only the one request this raffle made, and only the first time it arrives: retryCallback can
-        // re-deliver the same accepted word, and ids this contract never used are not its business.
+        // Only the one request this raffle made, and only once: a failed delivery is retried by anyone with
+        // retryCallback, and ids this contract never used are not its business.
         if (requestId != drawId || drawn) revert UnexpectedCallback();
         // Store and stop, so the callback cannot run out of its budget. Paying the prize belongs in a
         // separate transaction anyone can send once `drawn` is true.
         word = randomness;
         drawn = true;
+    }
+
+    /// If no proof is accepted within 60 seconds the request expires and anyone may call refundRequest(drawId)
+    /// on the coordinator. That returns the fee to whoever sent draw() and then calls this hook: the list stays
+    /// frozen and draw() may be sent again, so an expired request never leaves the raffle stuck.
+    function _onRefund(uint256 requestId) internal override {
+        if (requestId == drawId && !drawn) drawId = 0;
     }
 
     function winner() external view returns (address) {

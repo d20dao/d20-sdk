@@ -10,8 +10,8 @@ integration has to move; the coordinator interface a consumer calls is the same 
 - **The epoch source catalog is an on-chain recipe registry.** A recipe is a canonical request, a data template
   that fixes the exact signed bytes the registry accepts, and the gateway body. `registerRecipe` appends an id
   and a registered recipe never changes. Five sources are active: Hyperliquid BTC day volume, dRPC Ethereum
-  block hash, TickerLayer BTCUSD, Nodary ETH/USD and dRPC Base block hash. Arc Testnet already draws from them;
-  Arc Mainnet switches at epoch 848 on 2026-09-18.
+  block hash, TickerLayer BTCUSD, Nodary ETH/USD and dRPC Base block hash. Arc Testnet draws from them
+  from epoch 966 and Arc Mainnet from epoch 848.
 - **The keeper share follows the wallet that serves the request.** At proof acceptance `keeperFeeBps` of the
   escrowed fee goes to the submitting wallet when the registry authorizes it — the committer or an allowed
   backup committer — and to `committer()` for any other submitter. Backup committers let a second keeper take
@@ -25,13 +25,13 @@ integration has to move; the coordinator interface a consumer calls is the same 
   `MAX_ATTESTATION_AGE`, plus the data-template helpers `encodeDataTemplate`, `decodeDataTemplate`,
   `matchesDataTemplate`, `isValidDataTemplate` and `validateDataTemplate` on the root entry point.
 - `epochEntropyAbi` and `abi/EpochEntropy.json` cover `registerRecipe`, `getRecipe`, `recipeCount`,
-  `scheduleCatalog`, `catalogAt`, `setBackupCommitter` and `isBackupCommitter`. The four-signer catalog views
-  (`signersAt`, `catalogHashAt`, `anuSigner`) are gone.
+  `scheduleCatalog`, `catalogAt`, `setBackupCommitter`, `isBackupCommitter` and `isAuthorizedCommitter`. The
+  four-signer catalog views (`signersAt`, `catalogHashAt`, `anuSigner`) are gone.
 - `replayEpochCommitment` checks the committed packet against the recipe's canonical request and data template,
   and derives the fallback attempt from the committed source.
 - Three examples replace the previous two. `examples/DiceConsumer.sol` is a dice roll,
-  `examples/RaffleConsumer.sol` draws one winner from a frozen list and `examples/LootDropConsumer.sol` is a
-  weighted drop. Each is self-contained and about sixty lines.
+  `examples/RaffleConsumer.sol` draws one winner from a frozen list and shows the `_onRefund` hook, and
+  `examples/LootDropConsumer.sol` is a weighted drop. Each is self-contained and sixty to seventy lines.
 - **Removed:** `contracts/examples/MiningRandomnessConsumer.sol`. It was an abstract building block for one
   application, not something to copy on a first day. Nothing else imported it; the payment pattern it showed is
   in [Best practices](README.md#best-practices) and the change-returning variant is in `DiceConsumer`.

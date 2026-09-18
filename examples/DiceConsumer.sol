@@ -30,7 +30,7 @@ contract DiceConsumer is D20VRFConsumer {
         uint256 fee = rng.quoteFee(CALLBACK_GAS);
         if (msg.value < fee) revert Underpaid(fee, msg.value);
         // The helper pays exactly `fee` out of this contract's balance, which msg.value just funded.
-        // The player is the refund address, so an expired request refunds straight back to them.
+        // The player is the refund address, so if the request expires, refundRequest returns the fee straight to them.
         requestId = rng.d20(D20VRFRequests.Options(keccak256(abi.encode(msg.sender)), CALLBACK_GAS, msg.sender));
         rolls[requestId] = Roll(msg.sender, bytes32(0), false);
         // Hand the player's buffer back now. Left with the coordinator it becomes refund credit they would
@@ -43,8 +43,8 @@ contract DiceConsumer is D20VRFConsumer {
 
     function _fulfillRandomness(uint256 requestId, bytes32 randomness) internal override {
         Roll storage entry = rolls[requestId];
-        // Refuse a request this contract never made, and a second delivery of one it already holds:
-        // retryCallback can re-deliver the same accepted word, and the first answer is the only answer.
+        // Refuse a request this contract never made, and a repeat of one it already holds. A failed delivery is
+        // retried by anyone with retryCallback and a successful one is never repeated; the check costs one read.
         if (entry.player == address(0) || entry.ready) revert UnexpectedCallback();
         // Store, do not compute. The callback runs inside CALLBACK_GAS; work that overruns it fails the
         // delivery, and although the request stays served and paid, someone must retryCallback it.

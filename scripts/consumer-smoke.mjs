@@ -182,15 +182,50 @@ await assert.rejects(sdk.quoteRequestFee({ async getBlock() { return { number: 1
 await assert.rejects(sdk.quoteRequestFee({ async getBlock() { return { number: 1, baseFeePerGas: 1n }; }, async call() { return '0x'; } }, coordinatorAddress, 100_000), /no data/);
 await assert.rejects(sdk.quoteRequestFee(mockProvider(1n), coordinatorAddress, 2n**32n), /uint32/);
 await assert.rejects(sdk.quoteRequestFee(mockProvider(1n), coordinatorAddress, 100_000, { bufferBps: -1 }), /negative/);
-const input={language:'Solidity',sources:{'DiceConsumer.sol':{content:readFileSync('DiceConsumer.sol','utf8')},'MiningImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol";'},
+// The three shipped examples compile exactly as an integrator gets them: from the installed package, with no
+// local copy of the protocol sources and no OpenZeppelin.
+const exampleNames = ['DiceConsumer', 'RaffleConsumer', 'LootDropConsumer'];
+const exampleSources = Object.fromEntries(exampleNames.map(name => [`${name}.sol`, {content: readFileSync(`${name}.sol`,'utf8')}]));
+const input={language:'Solidity',sources:{...exampleSources,
  'RequestsImport.sol':{content:'pragma solidity 0.8.28; import "@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol";'}},settings:{optimizer:{enabled:true,runs:200},evmVersion:'cancun',outputSelection:{'*':{'*':['abi','evm.bytecode.object']}}}};
 const compiled=JSON.parse(solc.compile(JSON.stringify(input),{import:p=>{try{if(!p.startsWith('@d20dao/vrf-sdk/')||p.includes('..'))throw new Error('unexpected import');return {contents:readFileSync(resolve('node_modules',p),'utf8')};}catch(e){return {error:e.message};}}}));
 assert.deepEqual((compiled.errors??[]).filter(e=>e.severity==='error'),[]);
-assert(compiled.contracts['DiceConsumer.sol'].DiceConsumer.evm.bytecode.object.length>0);
 assert(compiled.contracts['@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol'].D20VRFRequests);
-const dice=new Interface(compiled.contracts['DiceConsumer.sol'].DiceConsumer.abi);
-assert.equal(dice.getFunction('roll').payable,true);
-assert.equal(dice.getError('WrongFee'), null, 'The example forwards msg.value; the coordinator enforces the quote and credits any excess');
+const examples = Object.fromEntries(exampleNames.map(name => {
+ const artifact = compiled.contracts[`${name}.sol`][name];
+ assert(artifact.evm.bytecode.object.length>0, `${name} produced no bytecode`);
+ const abi = new Interface(artifact.abi);
+ // Every example inherits the authenticated callback hooks and rejects callbacks it did not ask for.
+ assert(abi.getFunction('rawFulfillRandomness') && abi.getFunction('onRefund'), name);
+ assert(abi.getError('OnlyCoordinator') && abi.getError('InvalidCoordinator'), name);
+ assert(abi.deploy.inputs.length===1 && abi.deploy.inputs[0].type==='address', `${name} takes the coordinator proxy`);
+ return [name, abi];
+}));
+// Each example's entry point is payable: a request is always paid for in the transaction that makes it.
+for (const [name, fn] of [['DiceConsumer','roll'],['RaffleConsumer','draw'],['LootDropConsumer','open']]) {
+ assert.equal(examples[name].getFunction(fn).payable, true, `${name}.${fn}`);
+ assert(examples[name].getError('UnexpectedCallback'), name);
+}
+assert(examples.DiceConsumer.getError('Underpaid'), 'DiceConsumer checks the quote before paying it');
+assert.equal(examples.RaffleConsumer.getFunction('winner').stateMutability, 'view');
+assert.equal(examples.LootDropConsumer.getFunction('tierOf').stateMutability, 'view');
+// Exercise the outcomes the examples publish, using accepted words from the replay fixtures and the same
+// mapping the coordinator applies on chain. A word is read, never re-drawn: mapping it twice must agree.
+const lootWeights = [600, 250, 130, 20], totalWeight = lootWeights.reduce((a,b)=>a+b,0);
+const tierOf = draw => { let cursor = 0; for (let i = 0; i + 1 < lootWeights.length; ++i) { cursor += lootWeights[i]; if (draw <= cursor) return i; } return lootWeights.length - 1; };
+// Weights are adjacent ranges over the draw, and every boundary lands in exactly one tier.
+assert.deepEqual([1,600,601,850,851,980,981,1000].map(tierOf), [0,0,1,1,2,2,3,3]);
+for (const f of fixtures) {
+ const accepted = f.recorded.randomness;
+ const [face] = sdk.mapRandomness(accepted, sdk.builtins.d20()); // DiceConsumer.result
+ assert(face >= 1n && face <= 20n, 'd20 face out of range');
+ const entrants = 7, [index] = sdk.mapRandomness(accepted, sdk.builtins.chooseOne(entrants)); // RaffleConsumer.winner
+ assert(index >= 0n && index < BigInt(entrants), 'winner index outside the frozen list');
+ const [draw] = sdk.mapRandomness(accepted, sdk.builtins.numberRange(1n, BigInt(totalWeight))); // LootDropConsumer.tierOf
+ assert(draw >= 1n && draw <= BigInt(totalWeight), 'loot draw outside the weight range');
+ assert(tierOf(Number(draw)) < lootWeights.length, 'every draw names a tier');
+ assert.deepEqual(sdk.mapRandomness(accepted, sdk.builtins.d20()), [face], 'the same word must always map to the same result');
+}
 const consumer=new Interface(compiled.contracts['@d20dao/vrf-sdk/contracts/interfaces/ID20VRF.sol'].ID20VRF.abi);
 assert(consumer.getFunction('quoteFee') && consumer.getFunction('quoteFeeAt') && !consumer.hasFunction('requestFee'));
 consumer.forEachFunction(fragment=>{
@@ -199,4 +234,5 @@ consumer.forEachFunction(fragment=>{
  assert.deepEqual(coordinator.outputs.map(p=>p.format('sighash')),fragment.outputs.map(p=>p.format('sighash')));
 });
 console.log(fixtureProvenance.sourceMode+' recipe fixture coverage: '+coveredRecipes.join(', ')+'; legacy ANU evidence: '+legacyFixtures.length+' fixtures');
+console.log('Examples compiled from the installed package and exercised: '+exampleNames.join(', ')+'.');
 console.log('Current epoch/VRF replay, ABI, off-chain fee quoting, strict TypeScript, browser-target bundle ('+bundle.outputFiles[0].contents.length+' bytes) and Solidity checks passed.');

@@ -5,7 +5,7 @@
 Every function, event and error of `D20VRFCoordinator` and `EpochEntropy`, generated from the ABIs of `@d20dao/vrf-sdk` 0.4.0. Regenerate with `npm run build && npm run api-reference`; `npm test` fails when this file is out of date.
 
 - Package: `@d20dao/vrf-sdk` 0.4.0
-- Protocol source: commit `e1dc473d87db69b916d9f6919a62d8ea8ee24487`, copied to [`protocol/contracts/`](protocol/contracts/) (hashes in `PROTOCOL-PROVENANCE.json`)
+- Protocol source: commit `de5f82eb9fc749c80e83270f57cde9908ddcf1f3`, copied to [`protocol/contracts/`](protocol/contracts/) (hashes in `PROTOCOL-PROVENANCE.json`)
 - Compiler: solc 0.8.28+commit.7893614a.Emscripten.clang, EVM version `cancun`
 - `abi/D20VRFCoordinator.json` SHA-256: `4764ba62745e109f3b968b21ed23e88da739a4a26906fc2ed3192fa23b8d79c1`
 - `abi/EpochEntropy.json` SHA-256: `684ee3dfe0745f141831aee896db6436d490d5e9715e61661c86b044d1c3260e`

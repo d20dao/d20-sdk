@@ -1,32 +1,38 @@
 # d20dao VRF SDK
 
-Public replay, mapping, epoch evidence, off-chain fee quoting and Solidity consumer helpers for a general randomness service. Package: `@d20dao/vrf-sdk` `0.4.0`.
+**Randomness your users can check.** Your contract asks the coordinator for a random result and pays a fee. A few seconds later the coordinator calls your contract back with a word taken from a VRF proof it verified on chain. Nobody picks the answer, nobody gets a second attempt, and anyone can replay the proof afterwards with this package.
 
-## Getting started
+`@d20dao/vrf-sdk` is everything you need on the application side: the Solidity base contract your consumer inherits, the coordinator ABI, an off-chain fee quote for your front end, and the replay code that re-derives a published result from public evidence. It holds no keys and runs no service.
+
+The service is live on **Arc Mainnet** (chain 5042); develop against **Arc Testnet** (chain 5042002). Requests are permissionless — no allowlist, no subscription, no upfront deposit — but they must come from a contract, so a wallet or backend pays through its own consumer. Each request pays a fee quoted from the current base fee, a fraction of a USDC at typical gas prices (see [Pricing](#pricing)), and is served within 60 seconds or refunded.
+
+## Start here
 
 ```sh
 npm install @d20dao/vrf-sdk
 ```
 
-Use `@d20dao/vrf-sdk` 0.4.0 or newer, Node 22.13 or newer and Solidity 0.8.28 with EVM version `cancun`. The service is live on Arc Mainnet (chain 5042); use Arc Testnet (chain 5042002) for development (see [Networks](#networks)). Configure the coordinator proxy explicitly from the public deployment manifest for the chain you use (see [Deployments](#deployments)); there is no implicit network default. Any consumer contract can request randomness by paying at least the fee quoted for its transaction, without allowlisting. Requests must come from a contract; a wallet or backend pays through its own consumer contract.
+1. **Copy an example.** [`examples/DiceConsumer.sol`](examples/DiceConsumer.sol) rolls a d20, [`examples/RaffleConsumer.sol`](examples/RaffleConsumer.sol) picks one winner from a list, [`examples/LootDropConsumer.sol`](examples/LootDropConsumer.sol) makes a weighted drop. Each is about sixty lines and stands alone.
+2. **Compile it.** Node 22.13+, solc 0.8.28, `evmVersion: cancun`. Hardhat and Foundry settings are in [Compiler setup](#compiler-setup).
+3. **Deploy it** against the coordinator proxy for your chain, from [Deployments](#deployments). There is no default network; configure the address explicitly.
+4. **Request and read.** Quote the fee off-chain, send it through your consumer, take `requestId` from the receipt and poll until `fulfilled` — or until the 60-second deadline passes and you refund. See [Paying for a request](#paying-for-a-request) and [Reading results](#reading-results).
+
+Then read [Best practices](#best-practices): ten rules that cover most of what goes wrong. [API.md](API.md) lists every coordinator and registry function, event and error with its selector, caller and, for errors, what to do about it. [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp built this way, and [CHANGELOG.md](CHANGELOG.md) records what changed in this release.
 
 For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). The website guides are on d20dao.org: [guides](https://d20dao.org/docs) including [Getting started](https://d20dao.org/docs/getting-started) with its Copy prompt action, the guide index [d20dao.org/llms.txt](https://d20dao.org/llms.txt), the full text [d20dao.org/llms-full.txt](https://d20dao.org/llms-full.txt) and [d20dao.org/agents.md](https://d20dao.org/agents.md).
 
-## Quick path
+## Best practices
 
-1. **Network.** Choose the chain in [Networks](#networks) and take its coordinator proxy from [Deployments](#deployments). Wallet parameters are in [Frontend and backend use](#frontend-and-backend-use).
-2. **Install and compile.** Install the package as above and configure Hardhat or Foundry in [Compiler setup](#compiler-setup).
-3. **Consumer.** Start from [Recommended payment pattern](#recommended-payment-pattern), choose a result type in [Randomness options](#randomness-options) and size the [callback gas limit](#callback-gas-limit).
-4. **Request.** Quote off-chain and send the quoted value through your consumer: [Wallets and backends that pay through a consumer](#wallets-and-backends-that-pay-through-a-consumer).
-5. **Wait and read.** Take `requestId` from the receipt and poll until `fulfilled` or the deadline passes: [Reading results](#reading-results), [Timing](#timing).
-6. **Expiry and recovery.** Refund expired requests and retry failed callbacks with enough gas: [Expiry and refunds](#expiry-and-refunds), [Gas for refund and retry calls](#gas-for-refund-and-retry-calls).
-
-[API.md](API.md) lists every coordinator and registry function, event and error with its selector, caller and, for errors, what to do. [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp that follows these steps.
-
-Two pairs of names are easy to confuse:
-
-- `refundBps()` is the current refund ratio, copied into each new request; `requestRefundBps(requestId)` is the ratio one request copied at creation and is refunded at. Likewise `pricing()` and `quoteFee` price future requests, while `requestFeePaid(requestId)` is what one request escrowed. `keeperFeeBps()` has no per-request copy: it is read when a proof is accepted.
-- `RandomnessMapping.Spec` is the Solidity struct `(operation, lower, upper, count, population)` stored with a request. The TypeScript `MappingSpec` that `builtins` return has the same fields as an object, with `lower` and `upper` as `bigint`; ethers encodes it for the struct unchanged, and `hashMapping(spec)` equals the request's `mappingHash`. "Mapping" means a randomness mapping, not a Solidity `mapping`.
+1. **Quote with `quoteFeeAt(callbackGasLimit, block.baseFeePerGas)` plus a buffer, never through `eth_call`.** `eth_call` reports a base fee of 0, so `quoteFee` collapses to the minimum fee and the real transaction reverts with `IncorrectFee`. Inside the requesting transaction `quoteFee(callbackGasLimit)` is exact; off-chain, use `quoteRequestFee` or `quoteFeeAt` with the latest header's base fee and a buffer for the movement until inclusion.
+2. **Requests come from a contract, never an EOA.** A wallet call reverts with `ContractConsumerRequired`. The consumer is what the coordinator calls back, so it has to exist before the request.
+3. **Keep the callback small: store the result, do the work later.** It runs inside `callbackGasLimit` and its failure is not free to you in attention, even though the request is still served and paid. A failed callback is retried by anyone with `retryCallback(requestId, gasLimit)`, which redelivers the same accepted word — so the callback must be safe to run more than once.
+4. **Map each request id to your own context, and reject anything else.** Record who asked and what for when you request, then in the callback refuse a request id you never issued and one you have already finished.
+5. **Derive many values from one word instead of making many requests.** One request buys 256 bits. Ask for `diceRoll(sides, count)`, `chooseMany` or `shuffle` and the coordinator maps them for you; for application-specific values, `keccak256(abi.encode(word, i))` gives an independent value per `i`. A second request costs a second fee and a second wait.
+6. **Handle expiry, and choose the refund address deliberately.** If no proof is accepted within 60 seconds the request expires: nothing is fulfilled late, and anyone may call `refundRequest(requestId)`. The refund is pushed to the address fixed at request time, so pick one that can receive a plain native transfer or call `withdrawRefundCredit` — usually the paying user.
+7. **Never re-roll a result you dislike.** The word is final once `fulfilled` is true. Re-requesting after seeing an outcome is the one thing verifiable randomness cannot protect your users from, and the evidence trail makes it visible.
+8. **Never use `blockhash` or `block.timestamp` as randomness.** Both are chosen by whoever builds the block, and `blockhash` is only available for the last 256 blocks. That is the problem this service exists to solve.
+9. **Withdraw the refund credit your fee buffer leaves behind.** Anything above the escrowed quote is credited to the refund address (`FeeOverpaymentCredited`), readable with `refundCredits(address)` and pulled with `withdrawRefundCredit(recipient)`. Returning the change in the requesting transaction, as `DiceConsumer` does, avoids the second transaction entirely.
+10. **Freeze any list before you request an index into it.** `chooseOne`, `chooseMany` and `shuffle` answer with indices. Commit the list — hashing it into `clientSeed` puts the commitment in the request log, as `RaffleConsumer` does.
 
 ## Networks
 
@@ -49,13 +55,10 @@ Solidity imports require compiler 0.8.28 and your compiler's npm resolver:
 - `@d20dao/vrf-sdk/contracts/interfaces/ID20VRF.sol`
 - `@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol`
 - `@d20dao/vrf-sdk/contracts/libraries/RandomnessMapping.sol`
-- `@d20dao/vrf-sdk/contracts/examples/MiningRandomnessConsumer.sol`
 
 These sources import only each other; no OpenZeppelin installation is needed for a consumer.
 
 `D20VRFConsumer` authenticates the coordinator proxy. Verify the expected request in the callback and store the word with minimal work. Pin the effective coordinator proxy address, initialized configuration and implementation history of both service proxies. A constructor code-length check, SDK installation or permissionless request acceptance does not guarantee service.
-
-A complete consumer following the recommended payment pattern is shown in [Recommended payment pattern](#recommended-payment-pattern).
 
 ### Compiler setup
 
@@ -86,10 +89,16 @@ With either tool, `import {D20VRFConsumer} from "@d20dao/vrf-sdk/contracts/D20VR
 
 ### Examples
 
-- `examples/DiceConsumer.sol` (installed as `@d20dao/vrf-sdk/examples/DiceConsumer.sol`) is one concrete consumer example for a player-paid request. It forwards the player's `msg.value` to `requestMappedRandomness`, so the coordinator escrows the exact same-transaction quote, credits any excess to the player as the fixed refund address and reverts underpayment with `IncorrectFee`. It stores the authenticated raw callback word; its mapped result is 1 through 20. Mapped callbacks still carry raw bytes32. It marks refunded rolls in `_onRefund`. Keep application actions separate from callbacks; the example does not implement application-payment refunds, claim locking or minting.
-- `contracts/examples/MiningRandomnessConsumer.sol` (in the installed package; source in this repository's `protocol/contracts/examples/`) is an abstract building block. It pays `quoteFee` from the contract's own balance, requests raw randomness with `clientSeed = keccak256(abi.encode(claimId, lockedWork))`, maps each request to one claim, rejects unknown or repeated callbacks and derives three candidate seeds from the stored word. The application still validates work and locks payment before calling `_requestForClaim`.
+Three complete consumers ship in the package and install as `@d20dao/vrf-sdk/examples/<name>.sol`. Each is about sixty lines, deals with one idea and is meant to be copied and edited rather than imported. All three take the coordinator proxy in their constructor, authenticate the callback through `D20VRFConsumer`, refuse a request id they did not issue or have already finished, and read their outcome from `getMappedResult` instead of recomputing it.
+
+| Example | What it shows |
+| --- | --- |
+| [`DiceConsumer.sol`](examples/DiceConsumer.sol) | One d20 per player. Reads the exact `quoteFee` inside the requesting transaction, pays it, returns the change and names the player as the refund address. |
+| [`RaffleConsumer.sol`](examples/RaffleConsumer.sol) | One winner from a list. Closes entry before requesting, hashes the frozen list into `clientSeed` as an on-chain commitment and maps the winning index with `ChooseOne`. |
+| [`LootDropConsumer.sol`](examples/LootDropConsumer.sol) | A weighted drop. Asks for a `NumberRange` draw instead of taking a biased modulo of the word, stores the word in the callback and walks the weights on read. |
+
 - [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp: a consumer with one function per randomness option that stores the latest results onchain, and a single-page UI that requests, waits for and displays them. It runs on Arc Mainnet at https://mainnet-demo.d20dao.org.
-- `skills/d20-consumer/assets/RandomnessConsumer.sol` in [d20dao/skills](https://github.com/d20dao/skills) shows raw, mapped and shuffle requests that pay the exact quote and return change, with refund notification and refund-credit withdrawal.
+- `skills/d20-consumer/assets/RandomnessConsumer.sol` in [d20dao/skills](https://github.com/d20dao/skills) shows raw, mapped and shuffle requests in one contract, with refund notification and refund-credit withdrawal.
 
 ### Client seed
 
@@ -117,6 +126,8 @@ Every option is a `RandomnessMapping.Spec` `(operation, lower, upper, count, pop
 
 TypeScript bounds (`sides`, `min`, `max`) are `bigint`; `count`, `size` and `population` are integer `number` values. Invalid parameters throw in TypeScript and revert the request with `InvalidMapping` onchain. Results are `uint256[]` from `getMappedResult` and the coordinator's `mapRandomness`, and `bigint[]` from the SDK's `mapRandomness`. Sampling rejects the short residue range instead of taking a biased modulo. Choice and shuffle results are zero-based indices into a list the application must fix before requesting. Callbacks always receive the raw `bytes32` word, including for mapped requests.
 
+`RandomnessMapping.Spec` is the Solidity struct `(operation, lower, upper, count, population)` stored with a request. The TypeScript `MappingSpec` that `builtins` return has the same fields as an object, with `lower` and `upper` as `bigint`; ethers encodes it for the struct unchanged, and `hashMapping(spec)` equals the request's `mappingHash`. "Mapping" here means a randomness mapping, not a Solidity `mapping`.
+
 ## Pricing
 
 The coordinator prices every request from the base fee of the transaction that creates it:
@@ -135,13 +146,15 @@ Labelled examples with the initialization values (multiplier 5, overhead 300,000
 
 `quoteFeeAt(callbackGasLimit, baseFee)` evaluates the formula for a base fee you supply; `quoteFee(callbackGasLimit)` evaluates it for `block.basefee`. Quotes above the `uint96` escrow limit revert with `FeeOverflow` rather than truncating.
 
+Three fee names are easy to confuse. `pricing()` and `quoteFee` price *future* requests; `requestFeePaid(requestId)` is what *one* request escrowed and settles from. `refundBps()` is the current refund ratio, copied into each new request, while `requestRefundBps(requestId)` is the ratio that request copied at creation and is refunded at. `keeperFeeBps()` has no per-request copy at all: it is read when a proof is accepted.
+
 ## Paying for a request
 
 `requestRandomness(clientSeed, callbackGasLimit, refundAddress)` and `requestMappedRandomness(..., spec)` accept `msg.value >= fee`, where `fee` is the quote computed inside that transaction. Less reverts with `IncorrectFee(expected, actual)`. Exactly `fee` is escrowed and stored as `requestFeePaid(requestId)`; `RandomnessRequested` emits that charged fee as `feePaid`, not `msg.value`. Anything above it is not revenue: it is credited to the request's `refundAddress` as refund credit (`FeeOverpaymentCredited(requestId, refundAddress, amount)`, readable through `refundCredits(address)`) and is withdrawn by that address calling `withdrawRefundCredit(recipient)`. Choose a refund address that can make that call, or that can receive a plain native transfer for expiry refunds; a contract that can do neither strands its credit.
 
 ### Contracts that pay in the same transaction
 
-`quoteFee(callbackGasLimit)` is exact inside the requesting transaction. `D20VRFRequests` helpers and `MiningRandomnessConsumer` pay it from the calling contract's balance:
+`quoteFee(callbackGasLimit)` is exact inside the requesting transaction, so a contract can read the price and pay it in one go. The `D20VRFRequests` helpers do exactly that from the calling contract's balance:
 
 ```solidity
 uint256 fee = rng.quoteFee(callbackGasLimit);
@@ -156,67 +169,19 @@ Do not call `quoteFee` through `eth_call`: it prices with `block.basefee`, which
 import { quoteRequestFee } from '@d20dao/vrf-sdk';
 // provider: ethers Provider; coordinator: coordinator proxy address; 100_000: callbackGasLimit
 const { fee, value, baseFee } = await quoteRequestFee(provider, coordinator, 100_000, { bufferBps: 3000 });
-await dice.roll(clientSeed, 100_000, { value });
+await dice.roll({ value }); // DiceConsumer pays the exact quote and returns the rest
 ```
 
 `fee` is `quoteFeeAt(callbackGasLimit, baseFee)` for the block's actual base fee. `value` is the same quote recomputed at a base fee `bufferBps` higher (default 3000, 30%: an EIP-1559 base fee can rise 12.5% per block), so the request still pays if the base fee rises by up to that much before inclusion. When the minimum fee dominates even at the buffered base fee, `value` equals `fee` and nothing extra is sent. In example A, `value` is 5 × 228.8 gwei × 400,000 = 0.4576 USDC; a request included at 176 gwei escrows 0.352 USDC, and the remaining 0.1056 USDC is either returned by the consumer or credited to the refund address, depending on the payment pattern below. The helper never uses `quoteFee`, needs only `getBlock` and `call`, and throws if the block has no `baseFeePerGas`. If the base fee outruns the buffer or pricing changes in between, the transaction reverts with `IncorrectFee`; quote again and resend.
 
-### Recommended payment pattern
+### Choosing a payment pattern
 
-For a consumer whose users pay per request, pay the exact quote and return the change in the same transaction: read `fee = quoteFee(callbackGasLimit)`, require `msg.value >= fee`, send exactly `fee` to the coordinator and return `msg.value - fee` to the caller. Use the paying user as the refund address when it can receive a native transfer or call `withdrawRefundCredit` (any wallet can), so an expiry refund goes straight back to the payer. The front end sends `value` from `quoteRequestFee`; the unused buffer comes back immediately, nothing accumulates as refund credit and the contract holds no user funds.
+Two patterns cover almost every consumer, and the examples ship both.
 
-```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+- **Pay the exact quote and return the change** ([`DiceConsumer.sol`](examples/DiceConsumer.sol)). Read `fee = quoteFee(callbackGasLimit)`, require `msg.value >= fee`, pay exactly `fee` and send `msg.value - fee` back to the caller. The front end sends `value` from `quoteRequestFee`, the unused buffer returns immediately, nothing accumulates as refund credit and the contract never holds user funds. Name the paying user as the refund address — any wallet can receive a native transfer or call `withdrawRefundCredit` — so an expiry refund goes back to whoever paid.
+- **Forward `msg.value`** ([`RaffleConsumer.sol`](examples/RaffleConsumer.sol), [`LootDropConsumer.sol`](examples/LootDropConsumer.sol)). Fewer lines: the coordinator escrows its own quote, reverts `IncorrectFee` when that is more than arrived, and credits everything above it to the refund address. With a buffered off-chain quote most requests leave some credit, which that address pulls later with `withdrawRefundCredit`.
 
-import {D20VRFConsumer} from "@d20dao/vrf-sdk/contracts/D20VRFConsumer.sol";
-import {ID20VRF} from "@d20dao/vrf-sdk/contracts/interfaces/ID20VRF.sol";
-import {D20VRFRequests} from "@d20dao/vrf-sdk/contracts/libraries/D20VRFRequests.sol";
-
-contract D20Game is D20VRFConsumer {
-    using D20VRFRequests for ID20VRF;
-
-    uint32 public constant CALLBACK_GAS = 100_000;
-    mapping(uint256 => address) public playerOf;
-    mapping(uint256 => bytes32) public wordOf;
-    mapping(uint256 => bool) public ready;
-    error Underpaid(uint256 fee, uint256 sent);
-    error ChangeFailed();
-    error UnexpectedCallback();
-
-    constructor(address coordinator) D20VRFConsumer(coordinator) {}
-
-    function roll(bytes32 operationId) external payable returns (uint256 requestId) {
-        ID20VRF rng = ID20VRF(vrfCoordinator);
-        uint256 fee = rng.quoteFee(CALLBACK_GAS); // exact inside this transaction
-        if (msg.value < fee) revert Underpaid(fee, msg.value);
-        // The helper pays the same quoteFee from this contract's balance, which msg.value just funded.
-        // The player is the refund address: an expiry refund goes straight back to them.
-        requestId = rng.d20(D20VRFRequests.Options(keccak256(abi.encode(msg.sender, operationId)), CALLBACK_GAS, msg.sender));
-        playerOf[requestId] = msg.sender;
-        if (msg.value > fee) {
-            (bool ok,) = payable(msg.sender).call{value: msg.value - fee}("");
-            if (!ok) revert ChangeFailed();
-        }
-    }
-
-    function _fulfillRandomness(uint256 requestId, bytes32 randomness) internal override {
-        if (playerOf[requestId] == address(0) || ready[requestId]) revert UnexpectedCallback();
-        wordOf[requestId] = randomness;
-        ready[requestId] = true;
-    }
-
-    /// 1 to 20 once ready.
-    function result(uint256 requestId) external view returns (uint256) {
-        return ID20VRF(vrfCoordinator).getMappedResult(requestId)[0];
-    }
-}
-```
-
-The other patterns behave as follows:
-
-- **Forward `msg.value`** (`examples/DiceConsumer.sol`). The simplest code: the coordinator escrows the quote and credits everything above it to the refund address as refund credit. With a buffered off-chain quote most requests leave some credit, which the refund address must withdraw in a separate `withdrawRefundCredit` transaction.
-- **Pay from the contract balance** (`D20VRFRequests` helpers without returning change, `MiningRandomnessConsumer`). The application funds the contract and charges users under its own rules; it needs its own funding and withdrawal policy, and the refund address decides who receives expiry refunds.
+A contract that funds requests from its own balance uses the first form without the change transfer. It then needs its own funding and withdrawal policy, and its refund address decides who receives expiry refunds.
 
 ## Reading results
 
@@ -241,14 +206,14 @@ Views on the coordinator (all in `coordinatorAbi`; only `getMappedResult` is par
 
 [API.md](API.md) documents every view, event and error, including the order of events in a receipt.
 
-Polling with ethers 6, after sending the request through a consumer such as `D20Game`:
+Polling with ethers 6, after sending the request through a consumer such as `DiceConsumer`:
 
 ```js
 import { Contract } from 'ethers';
 import { coordinatorAbi } from '@d20dao/vrf-sdk/abi';
 
 const coordinator = new Contract(coordinatorAddress, coordinatorAbi, provider);
-const receipt = await (await game.roll(operationId, { value })).wait();
+const receipt = await (await dice.roll({ value })).wait();
 const requestId = receipt.logs
   .filter((log) => log.address.toLowerCase() === coordinatorAddress.toLowerCase())
   .map((log) => coordinator.interface.parseLog(log))
@@ -270,8 +235,6 @@ for (;;) {
 
 - The package is ESM only (`"type": "module"`, `import` export conditions) for Node 22.13+ and bundlers. In a browser application, import it through a bundler such as Vite, webpack or esbuild; the test suite bundles the root and `/abi` entries for the browser platform with esbuild. Import `@d20dao/vrf-sdk/abi` alone when only ABIs are needed.
 - `quoteRequestFee(provider, coordinator, callbackGasLimit, options)` expects an ethers v6 provider such as `JsonRpcProvider` or `BrowserProvider`, or any object with ethers-v6-shaped `getBlock(tag)` (with `baseFeePerGas` as `bigint`) and `call(tx)`. With viem or another client, repeat its steps: read the latest block's `baseFeePerGas`, add the buffer and call `quoteFeeAt(callbackGasLimit, bufferedBaseFee)`.
-- Quote from the block header base fee plus a buffer, never with `quoteFee` through `eth_call`, because `eth_call` reports a base fee of 0 (see [Wallets and backends that pay through a consumer](#wallets-and-backends-that-pay-through-a-consumer)).
-- Send the transaction to your consumer contract; the coordinator rejects requests from wallets with `ContractConsumerRequired`.
 - The SDK does not wrap viem or other clients; its ABIs are plain JSON and work with any library.
 - To add Arc to a browser wallet, use `wallet_addEthereumChain` with the values from [Networks](#networks). The native currency uses 18 decimals:
 
@@ -289,12 +252,12 @@ for (;;) {
   ```
 - Reverts from the coordinator are custom errors, and `coordinatorAbi` includes all of them. Decode revert data with `coordinator.interface.parseError(data)` in ethers, or add the coordinator ABI next to your consumer ABI so the wallet or library can name the error. The ones a consumer meets most often: `IncorrectFee(expected, actual)` (re-quote and resend), `InvalidCallbackGas`, `InvalidMapping` (from `RandomnessMapping`), `ContractConsumerRequired`, `UnknownRequest`, `NotFulfilled`, `RefundNotAvailable` (not yet past the deadline, already served or already refunded), `RequestRefunded` and `InsufficientCallbackGas` (raise the transaction gas limit; see [Gas for refund and retry calls](#gas-for-refund-and-retry-calls)). `OnlyCoordinator` comes from `D20VRFConsumer` and is only in your consumer's ABI. [API.md](API.md) gives every error's selector, the calls that raise it and what to do.
 - ethers v6 returns structs as `Result` objects that are also arrays. A field named like an `Array` or `Result` member, such as `values`, `length` or `map`, is shadowed; read it with `result.getValue('values')`, by position or from `result.toObject()`, or choose another field name.
-- Observed on 2026-09-17 while deploying the demo at https://mainnet-demo.d20dao.org: every public Arc RPC endpoint is on `*.arc.io`, and common browser ad-block filter lists block that domain, so read-only pages failed with `net::ERR_BLOCKED_BY_CLIENT` for many users. Read through the connected wallet's EIP-1193 provider when there is one (check its chain ID first), or serve a same-origin read-only JSON-RPC relay; the demo's [worker/index.js](https://github.com/d20dao/randomizer-demo/blob/main/worker/index.js) forwards only read methods and leaves transactions to the wallet.
-- Also observed on 2026-09-17, not a guarantee: `rpc.mainnet.arc.io` rate-limited batched JSON-RPC calls from shared Cloudflare egress addresses while `rpc.blockdaemon.mainnet.arc.io` accepted them, and the free plan of `rpc.drpc.*.arc.io` rejected batches of more than 3 calls. ethers `JsonRpcProvider` batches up to 100 calls by default; lower `batchMaxCount` in its options (`new JsonRpcProvider(url, 5042, { staticNetwork: true, batchMaxCount: 1 })`) for such endpoints. Poll no faster than you need and cache what cannot change: once `fulfilled` is true, `randomness` and the mapped result are final.
+- Every public Arc RPC endpoint is on `*.arc.io`, and common browser ad-block filter lists block that domain, so a page that reads the chain directly fails with `net::ERR_BLOCKED_BY_CLIENT` for a share of users. Read through the connected wallet's EIP-1193 provider when there is one (check its chain ID first), or through a read-only relay you serve from your own origin; the [randomizer-demo](https://github.com/d20dao/randomizer-demo) does the latter for read methods only and leaves transactions to the wallet.
+- Some RPC endpoints reject or rate-limit large JSON-RPC batches, and limits differ between providers and plans. ethers `JsonRpcProvider` batches up to 100 calls by default; lower `batchMaxCount` (`new JsonRpcProvider(url, 5042, { staticNetwork: true, batchMaxCount: 1 })`) when you meet one. Poll no faster than you need and cache what cannot change: once `fulfilled` is true, `randomness` and the mapped result are final.
 
 ## Request lifecycle
 
-Epochs last 200 blocks. Each epoch uses the catalog in force for it: 1 to 10 ordered sources, each a registered recipe with its signer (see [Recipes](#recipes)). The keeper selects a source using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next source in catalog order can be committed instead, one source per 20-block window (attempts 1 to count − 1); a saved response is never refreshed or resampled. The registry committer publishes, or a backup committer the owner allowed, such as a follower keeper on another host that takes over while the primary keeper is down; the keeper share always goes to the committer. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
+Epochs last 200 blocks. Each epoch uses the catalog in force for it: 1 to 10 ordered sources, each a registered recipe with its signer (see [Recipes](#recipes)). The keeper selects a source using the canonical block hash at epoch start minus one and prepares its first validated API3 snapshot locally. If the selected source yields no valid packet, the next source in catalog order can be committed instead, one source per 20-block window (attempts 1 to count − 1); a saved response is never refreshed or resampled. The registry committer publishes, or a backup committer the owner allowed so that a second keeper can take over. Idle preparation publishes no transaction. An unused local snapshot can be retained for 50 epochs (10,000 blocks), subject to live-demand and unresolved-transaction protection.
 
 A request escrows its quoted fee even when its epoch packet is not published yet, and fixes its original block, epoch, client seed, mapping, refund address, `feePaid`, `refundBps` and 60-second deadline. The keeper publishes the saved packet only for live paid demand. The randomness target becomes `max(requestBlock, committedBlock + 1)`, so its hash is unknown at publication; before publication the request has no usable target or VRF seed. Multiple requests share the packet, and timely requests can settle across epoch boundaries without changing their epoch.
 
@@ -302,7 +265,7 @@ Timely service is onchain proof acceptance at or before `requestedAt + 60` secon
 
 ### Timing
 
-Each request's deadline is its block timestamp plus 60 seconds (`RESPONSE_TIMEOUT`). A proof accepted onchain at or before the deadline serves the request; after it the request can only be refunded. On Arc, a single request is normally fulfilled within a few seconds. In a stress test, 200 simultaneous requests were all delivered within 36 seconds, with a median of 19 seconds; an earlier Arc Testnet run on 2026-09-16 served 68 paid requests within 2–4 chain seconds, 47 of them in batched fulfillments. Measured timings are not an SLA: wait up to the deadline, as in [Reading results](#reading-results), and handle expiry. If the keeper does not publish the request's epoch packet or a proof in time, for any reason, the request simply expires: nothing is fulfilled late, and the fee can be refunded as described below. Your application only needs to treat the request as expired.
+Each request's deadline is its block timestamp plus 60 seconds (`RESPONSE_TIMEOUT`). A proof accepted onchain at or before the deadline serves the request; after it the request can only be refunded. On Arc, a single request is normally fulfilled within a few seconds. Under load, 200 simultaneous requests were all delivered within 36 seconds, with a median of 19 seconds. Measured timings are not an SLA: wait up to the deadline, as in [Reading results](#reading-results), and handle expiry. If the keeper does not publish the request's epoch packet or a proof in time, for any reason, the request simply expires: nothing is fulfilled late, and the fee can be refunded as described below. Your application only needs to treat the request as expired.
 
 ### Expiry and refunds
 
@@ -363,9 +326,11 @@ Epoch sources are recipes in an owner-managed, append-only registry in `EpochEnt
 | 4 | Nodary | `latestFeeds`, name ETH/USD | `{"ETH/USD":{"value":<number>,"timestamp":<13 digits>,"category":"crypto"}}` |
 | 5 | dRPC | as recipe 1 on Base | as recipe 1 |
 
+Both networks now draw from a five-source catalog, `[0, 1, 2, 4, 5]`: Hyperliquid BTC day volume, the dRPC Ethereum block hash, TickerLayer BTCUSD, Nodary ETH/USD and the dRPC Base block hash. Arc Testnet is already on it; Arc Mainnet switches at epoch 848 on 2026-09-18. Read the catalog an epoch actually used from `catalogAt(epochId)` rather than assuming this one.
+
 `BUILTIN_EPOCH_RECIPES` (from `@d20dao/vrf-sdk/epoch`) holds these definitions, and replay uses them unless the catalog carries a `recipeBook`. For any other recipe, put its definition in `epoch.catalog.recipeBook`: `readEpochRecipes(provider, registry, ids)` reads `getRecipe` and checks each query hash, or rebuild it from `RecipeRegistered` logs. Replay checks every definition it uses: the committed packet must carry the recipe's canonical request and the signed data must match its template.
 
-Registry implementations before variable catalogs hardcoded ANU random numbers as recipe 1. Neither public registry ever committed an epoch from it (checked on 2026-09-17), so every published Arc epoch replays with the built-in recipes. Older evidence that did use ANU replays when its definition is supplied in `recipeBook` under id 1: canonical request `["randomNumbers",[["length",4],["size",8],["type","hex8"]]]`, body `{"operation":"randomNumbers","parameters":{"type":"hex8","length":4,"size":8}}` and the template described in [Data templates](#data-templates).
+Registry implementations before variable catalogs hardcoded ANU random numbers as recipe 1. Neither public registry ever committed an epoch from it, so every published Arc epoch replays with the built-in recipes. Older evidence that did use ANU replays when its definition is supplied in `recipeBook` under id 1: canonical request `["randomNumbers",[["length",4],["size",8],["type","hex8"]]]`, body `{"operation":"randomNumbers","parameters":{"type":"hex8","length":4,"size":8}}` and the template described in [Data templates](#data-templates).
 
 ### Data templates
 
@@ -408,11 +373,11 @@ Trust model:
 - **Recipes.** A signature establishes what a provider's gateway signed for a recipe's request, not that the upstream value is unbiased. The owner decides which recipes and signers future epochs use; a lax template accepts more signed records for a publisher to choose from.
 - **Keeper.** The VRF key holder can withhold a proof but cannot substitute a different result for a request's fixed seed. A request that is not served within 60 seconds is refundable at its snapshotted ratio.
 
-D20VRFCoordinator and EpochEntropy use atomically initialized ERC1967 proxies with owner-authorized UUPS upgrades and two-step ownership transfers; `renounceOwnership` reverts on both, so upgrade authority can only move through an accepted transfer. The registry owner can change the committer, allow backup committers, register recipes and schedule future catalogs; the coordinator owner can change fee recipient, keeper share, bounded pricing and the refund ratio. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Verify the implementation history of BOTH proxies at the relevant receipts; stable proxy addresses alone do not identify executed code. In practice, check it when you integrate and again whenever the deployment manifest records an upgrade or a proxy emits `Upgraded(implementation)`; a mismatch with the manifest means you should stop and review before sending more requests. Operators pin the proxy code, initialized configuration and both implementation addresses/runtime hashes; the keeper fails closed on an unreviewed implementation change.
+Both proxies are atomically initialized ERC1967 endpoints with owner-authorized UUPS upgrades, and the implementations behind them are locked against initialization. No setter rewrites a request, a published epoch or the VRF key, but upgrade authority can change code and is an explicit trust assumption. Stable proxy addresses alone do not identify executed code, so verify the implementation history of **both** proxies at the relevant receipts when you integrate, and again whenever the deployment manifest records an upgrade or a proxy emits `Upgraded(implementation)`. A mismatch with the manifest means stop and review before sending more requests.
 
 ## Use locally
 
-For SDK development, run `npm ci` and `npm test` from this repository. The test builds, checks that `API.md` matches the reference that `scripts/api-reference.mjs` generates from the built ABIs and the curated `scripts/api-descriptions.mjs` (regenerate with `npm run build && npm run api-reference`), packs and installs a real tarball in an isolated consumer, replays the recipe fixtures, type-checks a strict consumer, exercises `quoteRequestFee` against a mock provider and compiles the Solidity sources. `npm pack` also produces an installable local artifact.
+For SDK development, run `npm ci` and `npm test` from this repository. The test builds, checks that `API.md` matches the reference that `scripts/api-reference.mjs` generates from the built ABIs and the curated `scripts/api-descriptions.mjs` (regenerate with `npm run build && npm run api-reference`), packs and installs a real tarball in an isolated consumer, replays the recipe fixtures, type-checks a strict consumer, exercises `quoteRequestFee` against a mock provider, and compiles all three examples from the installed package and checks the outcomes they publish. `npm pack` also produces an installable local artifact.
 
 ```js
 import { builtins, mapRandomness, replayCoordinator, quoteRequestFee } from '@d20dao/vrf-sdk';
@@ -423,21 +388,21 @@ const mapping = builtins.d20();
 
 The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers, `BUILTIN_EPOCH_RECIPES`, `readEpochRecipes`, `resolveEpochCatalog` and `MAX_ATTESTATION_AGE`, and the root also exports the data-template helpers (`encodeDataTemplate`, `decodeDataTemplate`, `matchesDataTemplate`, `isValidDataTemplate`, `validateDataTemplate`). `/abi` exports `coordinatorAbi` and `epochEntropyAbi`, with JSON forms `D20VRFCoordinator.json` and `EpochEntropy.json`, both described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
 
-## Operational and release boundary
+## What this package is not
 
-This SDK contains no keeper service, API fetching, proof generation, signer secrets or deployment automation. The canonical keeper has a Docker install wrapper that builds, provisions separately supplied key files and starts from reviewed configuration; inspect its platform-specific guide before use. No deployment or funding is authorized by SDK installation.
+This SDK contains no keeper service, API fetching, proof generation, signer secrets or deployment automation. Installing it neither authorizes nor performs anything on chain.
 
-Optional Telegram access is disabled unless a bot token and numeric operator chat are explicitly configured. Only that chat can use read-only /status and /keeper commands. Commands never modify configuration or send transactions; notifications are best-effort observations, not chain evidence. This package neither reads bot credentials nor contacts Telegram.
+The public protocol source is this repository's [`protocol/`](https://github.com/d20dao/d20-sdk/tree/main/protocol) folder. `PROTOCOL-PROVENANCE.json` names the keeper commit it was copied from and the SHA-256 of every file; that keeper repository is not public, so read the source in `protocol/`. Builds use these reviewed protocol Git blobs and verify every SHA-256 in PROTOCOL-PROVENANCE.json. `src/fees.ts` (the fee-quoting helper) is SDK-owned rather than vendored; BUILD-MANIFEST.json records it under `packageSources` next to the protocol source, dependency-lock and imported OpenZeppelin hashes. The UUPS build uses OpenZeppelin contracts and contracts-upgradeable 5.6.1. Consumer source is copied exactly; service implementations, test fixtures and provers are excluded from the tarball.
 
-The public protocol source is this repository's [`protocol/`](https://github.com/d20dao/d20-sdk/tree/main/protocol) folder. `PROTOCOL-PROVENANCE.json` names the keeper commit it was copied from and the SHA-256 of every file; that keeper repository is not public, so read the source in `protocol/`. Builds use these reviewed protocol Git blobs and verify every SHA-256 in PROTOCOL-PROVENANCE.json. `src/fees.ts` (the fee-quoting helper) is SDK-owned rather than vendored; BUILD-MANIFEST.json records it under `packageSources` next to the protocol source, dependency-lock and imported OpenZeppelin hashes. The UUPS build uses OpenZeppelin contracts and contracts-upgradeable 5.6.1. Consumer source is copied exactly; service implementations, operator code, test fixtures and provers are excluded from the tarball.
+Each replay fixture set records how it was produced, so a real API3 capture is never mistaken for a test signature. Fixtures are not included in the package. The browser-target bundle is executed under Node, not in an actual browser; independently trusted chain context is still required for real verification.
 
-Fixture provenance distinguishes explicit CI signatures from actual API3 responses. Fixtures are not included in the package. The browser-target bundle is executed under Node, not an actual browser session; independently trusted chain context is still required for real verification.
-
-SDK installation provides consumer and verification tooling. Chain availability, provider quotas, upgrade administration and application settlement remain separate concerns. A healthy process alone does not guarantee a particular request's timely fulfillment.
+SDK installation provides consumer and verification tooling. Chain availability, provider quotas, upgrade administration and application settlement remain separate concerns, and none of them guarantees a particular request's timely fulfillment.
 
 ## Deployments
 
-The registry ABI, `API.md` and epoch helpers in this package describe the recipe-registry implementation of `EpochEntropy`. On 2026-09-17 neither network runs it yet: the Arc Mainnet registry implementation predates variable catalogs and the recipe registry, and the Arc Testnet one has variable catalogs but no recipe registry. The owner installs it with `upgradeToAndCall(implementation, initializeRecipeRegistry())`, after which the manifest records the new implementation; until then read those registries with the ABI of SDK 0.3.4. Epochs already published on either network replay with this SDK's built-in recipes. Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json), and check that the coordinator implementation at your chain's proxy exposes `quoteFee`/`quoteFeeAt` (its code hash matches the manifest entry for this protocol version) before relying on this SDK's interface.
+Both networks run the implementations this package describes, behind the same proxy addresses as before: the recipe registry in `EpochEntropy` and the coordinator that pays the keeper share to the authorized wallet which submitted the accepted proof. The two chains run the same implementation addresses. Epochs published before the upgrade still replay with this SDK's built-in recipes.
+
+Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json). The addresses below are copied from them and are only valid together with the manifest revision they came from, because implementations move through owner-authorized upgrades. Before relying on this SDK's interface, check that the implementation at your chain's proxy matches the manifest entry.
 
 ### Arc Mainnet
 
@@ -448,11 +413,11 @@ Chain ID: **5042**. The live service; use the **coordinator proxy** when constru
 | D20VRFCoordinator | Consumer entry point / proxy | [`0xd20da057469C45928912d983F45790C41e290571`](https://explorer.arc.io/address/0xd20da057469C45928912d983F45790C41e290571) |
 | EpochEntropy | Epoch registry / proxy | [`0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D`](https://explorer.arc.io/address/0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D) |
 | D20CostClient | Restricted cost client / proxy | [`0xD20da0048aED2BBb9f0e7078Bc452815D626D29d`](https://explorer.arc.io/address/0xD20da0048aED2BBb9f0e7078Bc452815D626D29d) |
-| D20VRFCoordinator | Implementation | [`0xD20da0c375cEfCdA65703699A4090237057e9b68`](https://explorer.arc.io/address/0xD20da0c375cEfCdA65703699A4090237057e9b68) |
-| EpochEntropy | Implementation | [`0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5`](https://explorer.arc.io/address/0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5) |
+| D20VRFCoordinator | Implementation | [`0xd20da0DADa4352A1a9722be43a2D85923443458c`](https://explorer.arc.io/address/0xd20da0DADa4352A1a9722be43a2D85923443458c) |
+| EpochEntropy | Implementation | [`0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865`](https://explorer.arc.io/address/0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://explorer.arc.io/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
-Addresses are copied from the [Arc Mainnet deployment manifest](https://d20dao.org/deployments/arc-mainnet.json). Mainnet and testnet run the same coordinator implementation.
+Addresses are copied from the [Arc Mainnet deployment manifest](https://d20dao.org/deployments/arc-mainnet.json). Both networks run the same coordinator and registry implementations.
 
 ### Arc Testnet
 
@@ -463,8 +428,8 @@ Chain ID: **5042002**. For development and testing. Use the **coordinator proxy*
 | D20VRFCoordinator | Consumer entry point / proxy | [`0xd20DA0FF9087d053f0291524Eac12abA1ADBd945`](https://testnet.arcscan.app/address/0xd20DA0FF9087d053f0291524Eac12abA1ADBd945) |
 | EpochEntropy | Epoch registry / proxy | [`0xD20Da00B47A7cD2211dC4683E306913b05903756`](https://testnet.arcscan.app/address/0xD20Da00B47A7cD2211dC4683E306913b05903756) |
 | D20CostClient | Restricted cost client / proxy | [`0xD20da026090B8472579a2B93030F1fC4c94807F1`](https://testnet.arcscan.app/address/0xD20da026090B8472579a2B93030F1fC4c94807F1) |
-| D20VRFCoordinator | Implementation | [`0xD20da0c375cEfCdA65703699A4090237057e9b68`](https://testnet.arcscan.app/address/0xD20da0c375cEfCdA65703699A4090237057e9b68) |
-| EpochEntropy | Implementation | [`0xD20dA0311C56f92d841d5c74F15ec691e0cfB960`](https://testnet.arcscan.app/address/0xD20dA0311C56f92d841d5c74F15ec691e0cfB960) |
+| D20VRFCoordinator | Implementation | [`0xd20da0DADa4352A1a9722be43a2D85923443458c`](https://testnet.arcscan.app/address/0xd20da0DADa4352A1a9722be43a2D85923443458c) |
+| EpochEntropy | Implementation | [`0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865`](https://testnet.arcscan.app/address/0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://testnet.arcscan.app/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
-Addresses are copied from the [Arc Testnet deployment manifest](https://d20dao.org/deployments/arc-testnet.json). Explorer links identify addresses; they do not assert explorer source-code verification. Implementation addresses change through owner-authorized upgrades, so the implementation rows and code hashes are only valid together with the manifest revision they came from. The pilot consumer is test tooling, not a shared application entry point.
+Addresses are copied from the [Arc Testnet deployment manifest](https://d20dao.org/deployments/arc-testnet.json). Explorer links identify addresses; they do not assert explorer source-code verification. The cost client is internal tooling, not a shared application entry point.

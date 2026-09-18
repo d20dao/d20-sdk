@@ -77,11 +77,11 @@ const program = ts.createProgram([...modules, ...sdkModules, 'abi'].map(n => res
 const result = program.emit();
 const diagnostics = [...ts.getPreEmitDiagnostics(program), ...result.diagnostics];
 if (diagnostics.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, { getCurrentDirectory: () => pkg, getCanonicalFileName: f => f, getNewLine: () => '\n' }));
-for (const path of ['D20VRFConsumer.sol', 'interfaces/ID20VRF.sol', 'libraries/D20VRFRequests.sol', 'libraries/RandomnessMapping.sol', 'examples/MiningRandomnessConsumer.sol']) {
+for (const path of ['D20VRFConsumer.sol', 'interfaces/ID20VRF.sol', 'libraries/D20VRFRequests.sol', 'libraries/RandomnessMapping.sol']) {
   put(`contracts/${path}`, read(`contracts/${path}`));
 }
 put('LICENSE', read('LICENSE'));
 put('notices/CHAINLINK-LICENSE', read('contracts/vendor/CHAINLINK-LICENSE'));
 put('notices/PROVENANCE.md', read('contracts/vendor/PROVENANCE.md'));
 put('BUILD-MANIFEST.json', JSON.stringify(manifest, null, 2) + '\n');
-console.log('Built public ESM/declarations, canonical coordinator/epoch registry ABIs and five consumer Solidity sources.');
+console.log('Built public ESM/declarations, canonical coordinator/epoch registry ABIs and four consumer Solidity sources.');

@@ -24,11 +24,12 @@ function packedInfo(args) {
 const dry = packedInfo(['pack', '--dry-run', '--json']);
 const packed = packedInfo(['pack', '--json']);
 assert.deepEqual(dry.files.map(f => f.path), packed.files.map(f => f.path));
-const required = ['AGENTS.md', 'API.md', 'LICENSE', 'README.md', 'BUILD-MANIFEST.json', 'PROTOCOL-PROVENANCE.json', 'dist/index.js', 'dist/index.d.ts',
-  'dist/abi.js', 'dist/abi.d.ts', 'dist/epoch.js', 'dist/epoch.d.ts', 'dist/templates.js', 'dist/templates.d.ts', 'dist/fees.js', 'dist/fees.d.ts', 'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json', 'examples/DiceConsumer.sol', 'notices/CHAINLINK-LICENSE'];
+const required = ['AGENTS.md', 'API.md', 'CHANGELOG.md', 'LICENSE', 'README.md', 'BUILD-MANIFEST.json', 'PROTOCOL-PROVENANCE.json', 'dist/index.js', 'dist/index.d.ts',
+  'dist/abi.js', 'dist/abi.d.ts', 'dist/epoch.js', 'dist/epoch.d.ts', 'dist/templates.js', 'dist/templates.d.ts', 'dist/fees.js', 'dist/fees.d.ts', 'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json',
+  'examples/DiceConsumer.sol', 'examples/RaffleConsumer.sol', 'examples/LootDropConsumer.sol', 'notices/CHAINLINK-LICENSE'];
 for (const name of required) assert(packed.files.some(f => f.path === name), `Missing ${name}`);
 for (const { path } of packed.files) {
-  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|templates|epoch|fees|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol|examples\/MiningRandomnessConsumer\.sol)|examples\/DiceConsumer\.sol|notices\/(?:CHAINLINK-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|API\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
+  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|templates|epoch|fees|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol)|examples\/(?:DiceConsumer|RaffleConsumer|LootDropConsumer)\.sol|notices\/(?:CHAINLINK-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|API\.md|CHANGELOG\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
 }
 const metadata = JSON.parse(readFileSync(resolve(pkg, 'package.json')));
 assert.notEqual(metadata.private, true);
@@ -39,7 +40,7 @@ console.log(`Fresh consumer: ${temp}`);
 writeFileSync(resolve(temp, 'package.json'), JSON.stringify({ name: 'sdk-smoke-consumer', private: true, type: 'module', overrides: { solc: { tmp: '0.2.7' } } }));
 const installTarget = process.argv.includes('--registry') ? `${metadata.name}@${metadata.version}` : resolve(pkg, packed.filename);
 console.log(npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', installTarget, 'typescript@5.9.3', 'solc@0.8.28', 'esbuild@0.28.2'], temp));
-copyFileSync(resolve(pkg, 'examples/DiceConsumer.sol'), resolve(temp, 'DiceConsumer.sol'));
+for (const name of ['DiceConsumer.sol', 'RaffleConsumer.sol', 'LootDropConsumer.sol']) copyFileSync(resolve(pkg, `examples/${name}`), resolve(temp, name));
 // Explicitly selected current fixture provenance distinguishes CI signatures from live API3.
 const activeFixtures = JSON.parse(readFileSync(resolve(pkg, 'scripts/fixtures/active.json'),'utf8'));
 assert(/^[a-z0-9-]+$/.test(activeFixtures.directory), 'Fixture directory must remain local');

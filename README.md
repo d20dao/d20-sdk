@@ -139,13 +139,14 @@ The coordinator prices every request from the base fee of the transaction that c
 fee = max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit))
 ```
 
-`pricing()` returns the live `(minFee, feeMultiplier, fulfillGasOverhead)`. The owner can move them with `setPricing(minFee, multiplier, overhead)` (event `PricingChanged`) only within fixed bounds: `minFee` at most 10 USDC (`10e18` wei; native USDC on Arc uses 18 decimals), `feeMultiplier` 0 to 20 where 0 means a flat `minFee`, `fulfillGasOverhead` 100,000 to 2,000,000 gas. Both Arc deployments were initialized with a 0.08 USDC minimum fee (`initialMinFee()`), multiplier 5 and overhead 300,000 gas, together with a 50% keeper share (`keeperFeeBps` 5000) and a 100% refund ratio. These are initialization values, not fixed prices: read the live values instead of hard-coding them. A pricing change never touches requests that are already open, because each request settles from the fee it escrowed.
+`pricing()` returns the live `(minFee, feeMultiplier, fulfillGasOverhead)`. The owner can move them with `setPricing(minFee, multiplier, overhead)` (event `PricingChanged`) only within fixed bounds: `minFee` at most 10 USDC (`10e18` wei; native USDC on Arc uses 18 decimals), `feeMultiplier` 0 to 20 where 0 means a flat `minFee`, `fulfillGasOverhead` 100,000 to 2,000,000 gas. Both Arc deployments were initialized with a 0.08 USDC minimum fee (`initialMinFee()`), multiplier 5 and overhead 300,000 gas, together with a 50% keeper share (`keeperFeeBps` 5000) and a 100% refund ratio. Arc Testnet still uses these values. Since 2026-09-18 Arc Mainnet charges a 0.02 USDC minimum fee, multiplier 3 and overhead 300,000 gas, with a 60% keeper share (`keeperFeeBps` 6000). Prices are not fixed: read the live values instead of hard-coding them. A pricing change never touches requests that are already open, because each request settles from the fee it escrowed.
 
-Labelled examples with the initialization values (multiplier 5, overhead 300,000 gas, 0.08 USDC minimum fee):
+Labelled examples. A to C use the initialization values (multiplier 5, overhead 300,000 gas, 0.08 USDC minimum fee); D uses Arc Mainnet pricing.
 
 - **A, 176 gwei base fee, 100,000 callback gas.** Dynamic part 5 × 176 gwei × 400,000 = 0.352 USDC, above the minimum, so the fee is 0.352 USDC.
 - **B, 20 gwei base fee, 100,000 callback gas.** Dynamic part 5 × 20 gwei × 400,000 = 0.04 USDC, below the minimum, so the fee is 0.08 USDC.
 - **C, multiplier set to 0.** The fee is `minFee` at any base fee.
+- **D, Arc Mainnet, 20 gwei base fee, 100,000 callback gas.** Dynamic part 3 × 20 gwei × 400,000 = 0.024 USDC, above the 0.02 USDC minimum, so the fee is 0.024 USDC.
 
 `quoteFeeAt(callbackGasLimit, baseFee)` evaluates the formula for a base fee you supply; `quoteFee(callbackGasLimit)` evaluates it for `block.basefee`. Quotes above the `uint96` escrow limit revert with `FeeOverflow` rather than truncating.
 

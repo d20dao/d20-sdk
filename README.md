@@ -1,4 +1,6 @@
-# d20dao VRF SDK
+# D20DAO VRF SDK
+
+[Verifiable randomness for onchain apps](https://d20dao.org), currently deployed on Arc Mainnet and Arc Testnet. [Get started](https://d20dao.org/docs/getting-started) · [Integration guide](https://d20dao.org/docs/integration) · [Public proof replay](https://d20dao.org/docs/verification).
 
 **Randomness your users can check.** Your contract asks the coordinator for a random result and pays a fee. A few seconds later the coordinator calls your contract back with a word taken from a VRF proof it verified on chain. Nobody picks the answer, nobody gets a second attempt, and anyone can replay the proof afterwards with this package.
 

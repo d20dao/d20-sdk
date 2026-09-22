@@ -404,7 +404,7 @@ SDK installation provides consumer and verification tooling. Chain availability,
 
 ## Deployments
 
-Both networks run the implementations this package describes, behind the same proxy addresses as before: the recipe registry in `EpochEntropy` and the coordinator that pays the keeper share to the authorized wallet which submitted the accepted proof. The two chains run the same implementation addresses. Epochs published before the upgrade still replay with this SDK's built-in recipes.
+Both networks run the recipe registry in `EpochEntropy` and the coordinator that pays the keeper share to the authorized wallet which submitted the accepted proof, behind the same proxy addresses as before. Since 2026-09-22 the coordinator also budgets every served member's callback gas before `fulfillRandomnessBatch` reveals any result, and `setPricing` rejects a zero minimum fee with a zero multiplier; its ABI and storage layout are those of the source in `protocol/`. The two chains run the same implementation addresses. Epochs published before the upgrades still replay with this SDK's built-in recipes.
 
 Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json). The addresses below are copied from them and are only valid together with the manifest revision they came from, because implementations move through owner-authorized upgrades. Before relying on this SDK's interface, check that the implementation at your chain's proxy matches the manifest entry.
 
@@ -417,7 +417,7 @@ Chain ID: **5042**. The live service; use the **coordinator proxy** when constru
 | D20VRFCoordinator | Consumer entry point / proxy | [`0xd20da057469C45928912d983F45790C41e290571`](https://explorer.arc.io/address/0xd20da057469C45928912d983F45790C41e290571) |
 | EpochEntropy | Epoch registry / proxy | [`0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D`](https://explorer.arc.io/address/0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D) |
 | D20CostClient | Restricted cost client / proxy | [`0xD20da0048aED2BBb9f0e7078Bc452815D626D29d`](https://explorer.arc.io/address/0xD20da0048aED2BBb9f0e7078Bc452815D626D29d) |
-| D20VRFCoordinator | Implementation | [`0xd20da0DADa4352A1a9722be43a2D85923443458c`](https://explorer.arc.io/address/0xd20da0DADa4352A1a9722be43a2D85923443458c) |
+| D20VRFCoordinator | Implementation | [`0xD20da000125643B4db5A6A36A3b853c17745DF44`](https://explorer.arc.io/address/0xD20da000125643B4db5A6A36A3b853c17745DF44) |
 | EpochEntropy | Implementation | [`0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865`](https://explorer.arc.io/address/0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://explorer.arc.io/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
@@ -432,7 +432,7 @@ Chain ID: **5042002**. For development and testing. Use the **coordinator proxy*
 | D20VRFCoordinator | Consumer entry point / proxy | [`0xd20DA0FF9087d053f0291524Eac12abA1ADBd945`](https://testnet.arcscan.app/address/0xd20DA0FF9087d053f0291524Eac12abA1ADBd945) |
 | EpochEntropy | Epoch registry / proxy | [`0xD20Da00B47A7cD2211dC4683E306913b05903756`](https://testnet.arcscan.app/address/0xD20Da00B47A7cD2211dC4683E306913b05903756) |
 | D20CostClient | Restricted cost client / proxy | [`0xD20da026090B8472579a2B93030F1fC4c94807F1`](https://testnet.arcscan.app/address/0xD20da026090B8472579a2B93030F1fC4c94807F1) |
-| D20VRFCoordinator | Implementation | [`0xd20da0DADa4352A1a9722be43a2D85923443458c`](https://testnet.arcscan.app/address/0xd20da0DADa4352A1a9722be43a2D85923443458c) |
+| D20VRFCoordinator | Implementation | [`0xD20da000125643B4db5A6A36A3b853c17745DF44`](https://testnet.arcscan.app/address/0xD20da000125643B4db5A6A36A3b853c17745DF44) |
 | EpochEntropy | Implementation | [`0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865`](https://testnet.arcscan.app/address/0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865) |
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://testnet.arcscan.app/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 

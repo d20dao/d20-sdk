@@ -3,9 +3,9 @@
 ## 0.5.0
 
 Replay covers drand beacon epochs. Arc Testnet draws its epochs from drand since epoch 11319 (2026-09-30) and Arc
-Mainnet since epoch 12448 (2026-10-01). The proxy addresses are unchanged and the
-interface a consumer calls is the same as in 0.4.0, so a consumer needs no change. Replay tools do: 0.4.0 rejects a
-beacon epoch's 64-byte signature with `Expected canonical 65-byte low-s EIP-191 signature`.
+Mainnet since epoch 12448 (2026-10-01). The proxy addresses are unchanged and the interface a consumer calls is the
+same as in 0.4.0, so a consumer needs no change. Replay tools do: 0.4.0 rejects a beacon epoch's 64-byte signature
+with `Expected canonical 65-byte low-s EIP-191 signature`.
 
 ### Protocol
 

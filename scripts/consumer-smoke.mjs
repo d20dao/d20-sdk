@@ -1,10 +1,11 @@
 // Runs only after installing the actual tarball into an isolated consumer.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import solc from 'solc';
-import { Interface, getBytes, getAddress } from 'ethers';
+import { Interface, getBytes, getAddress, hexlify, keccak256, toUtf8Bytes, ZeroAddress, ZeroHash } from 'ethers';
 import * as sdk from '@d20dao/vrf-sdk';
 import * as epoch from '@d20dao/vrf-sdk/epoch';
 import { coordinatorAbi, epochEntropyAbi, beaconVerifierAbi } from '@d20dao/vrf-sdk/abi';
@@ -156,13 +157,199 @@ for (const f of legacyFixtures) {
  if (Number(f.epoch.record.source) === 1) assert.throws(() => sdk.replayCoordinator(f), /Epoch recipe mismatch/);
  else assert.equal(sdk.replayCoordinator(f).reveal.randomness, f.recorded.randomness);
 }
+// Real Arc data, recorded with scripts/record-live-fixture.mjs from the public RPCs: signed-record epochs of both networks and
+// the drand beacon epochs of Arc Testnet. Every accepted request replays through the public API to the word the chain recorded.
+const revive = (_key,value) => typeof value === 'string' && /^[0-9]+$/.test(value) ? BigInt(value) : value;
+const liveNames = JSON.parse(readFileSync('live-fixture-names.json','utf8'));
+const liveSets = Object.fromEntries(Object.entries(liveNames).map(([set, names]) => [set, {
+ provenance: JSON.parse(readFileSync(`${set}-provenance.json`,'utf8')),
+ fixtures: names.map(name => [name.slice(set.length + 1), JSON.parse(readFileSync(name,'utf8'), revive)]),
+}]));
+const recipesOf = ({fixtures: recorded}) => recorded.map(([, f]) => recipeOf(f)).sort((a, b) => a - b);
+assert.deepEqual(recipesOf(liveSets['arc-mainnet-signed']), [0,1,2,2,4,5,6,7,8]);
+assert.deepEqual(recipesOf(liveSets['arc-testnet-signed']), [3,9,10]);
+assert.deepEqual(recipesOf(liveSets['arc-testnet-drand']), [11,11]);
+// Each network's signed set holds epochs of its initial catalog and of a scheduled catalog.
+for (const set of ['arc-mainnet-signed', 'arc-testnet-signed']) assert(liveSets[set].fixtures.some(([, f]) => f.epoch.catalog.recipes === undefined) && liveSets[set].fixtures.some(([, f]) => f.epoch.catalog.recipes !== undefined), set);
+for (const [set, {provenance, fixtures: recorded}] of Object.entries(liveSets)) {
+ assert.match(provenance.sourceMode, /^live Arc (?:Mainnet|Testnet)$/);
+ assert.deepEqual(Object.keys(provenance.fixtures).sort(), recorded.map(([name]) => name).sort());
+ for (const [name, f] of recorded) {
+  const entry = provenance.fixtures[name];
+  assert.equal(f.context.chainId, provenance.sourceMode.endsWith('Mainnet') ? 5042n : 5042002n);
+  assert.equal(BigInt(provenance.chainId), f.context.chainId);
+  assert.equal(BigInt(entry.requestId), f.context.requestId);
+  assert.equal(BigInt(entry.epochId), f.context.epochId);
+  assert.equal(BigInt(entry.acceptanceBlock), f.acceptanceBlock);
+  assert.match(entry.fulfillmentTransactionHash, /^0x[0-9a-f]{64}$/);
+  assert.equal(sdk.replayCoordinator(f).reveal.randomness, f.recorded.randomness, `${set} ${name}`);
+  assert.equal(sdk.deriveRequestSeed(f.context), f.vrfProof.seed);
+  assert.equal(sdk.epochProtocolConfigurationHash(f.configuration), f.protocolConfigurationHash);
+  // The epoch alone, and its freshness bound: signed (a beacon round: scheduled) at most 240 seconds before publication.
+  const commitment = {...f.epoch, epochId: f.context.epochId}, signedAt = f.epoch.record.signedAt;
+  assert.equal(epoch.replayEpochCommitment(commitment).epochHash, f.context.epochHash);
+  assert.equal(epoch.decodeEpochEvidencePacket(f.epoch.packet).attestation.timestamp, signedAt);
+  assert.equal(epoch.replayEpochCommitment({...commitment, commitTimestamp: signedAt + 240n}).epochHash, f.context.epochHash);
+  assert.throws(() => epoch.replayEpochCommitment({...commitment, commitTimestamp: signedAt + 241n}), /attestation time/);
+  assert.throws(() => epoch.replayEpochCommitment({...commitment, commitTimestamp: signedAt - 1n}), /attestation time/);
+ }
+}
+const flipByte = (hex, index) => { const bytes = getBytes(hex).slice(); bytes[index] ^= 1; return hexlify(bytes); };
+const attestationOf = f => epoch.decodeEpochEvidencePacket(f.epoch.packet);
+// f.epoch with its committed attestation changed, or with its catalog changed; the rest of the evidence stays as recorded.
+const withAttestation = (f, change) => { const {canonicalRequest, attestation} = attestationOf(f); return {...f.epoch, epochId: f.context.epochId, packet: epoch.encodeEpochEvidencePacket(canonicalRequest, {...attestation, ...change(attestation)})}; };
+const withCatalog = (f, change) => ({...f.epoch, epochId: f.context.epochId, catalog: change(f.epoch.catalog)});
+// Signed-record epochs, as before the drand beacon: a 65-byte EIP-191 signature of the catalog's signer.
+const signedFixtures = ['arc-mainnet-signed', 'arc-testnet-signed'].flatMap(set => liveSets[set].fixtures.map(([, f]) => f));
+const passthroughOf = {6: 0, 7: 1, 8: 2, 9: 4, 10: 5}; // recipes 6-10 are the passthrough listings of built-in recipes 0, 1, 2, 4, 5
+for (const f of signedFixtures) {
+ const book = f.epoch.catalog.recipeBook, recipe = recipeOf(f), {attestation} = attestationOf(f);
+ assert(Object.values(book).every(entry => entry.beacon === undefined));
+ assert.equal(getBytes(attestation.signature).length, 65);
+ for (const [id, definition] of Object.entries(book)) {
+  const expected = id < 6 ? epoch.BUILTIN_EPOCH_RECIPES[id] : epoch.passthroughEpochRecipe(passthroughOf[id]);
+  assert.deepEqual({...definition}, {canonicalRequest: expected.canonicalRequest, template: expected.template, body: expected.body});
+ }
+ // Built-in recipes replay without a recipe book; the passthrough recipes need their registered definitions.
+ const bare = withCatalog(f, catalog => ({...catalog, recipeBook: undefined}));
+ if (recipe < 6) assert.equal(epoch.replayEpochCommitment(bare).epochHash, f.context.epochHash);
+ else assert.throws(() => epoch.replayEpochCommitment(bare), /Unknown epoch recipe/);
+ assert.throws(() => epoch.replayEpochCommitment(withAttestation(f, a => ({signature: flipByte(a.signature, 40)}))));
+ assert.throws(() => epoch.replayEpochCommitment(withAttestation(f, a => ({signature: hexlify(getBytes(a.signature).slice(0, 64))}))), /65-byte/);
+ assert.throws(() => epoch.replayEpochCommitment(withAttestation(f, a => ({timestamp: a.timestamp - 1n}))));
+ assert.throws(() => sdk.replayCoordinator({...f, epoch: withCatalog(f, catalog => ({...catalog, signers: catalog.signers.map(() => '0x' + '11'.repeat(20))}))}));
+}
+// A beacon epoch commits one drand round: the round number as data, its scheduled time and the beacon's 64-byte BLS signature.
+const g2Generator = '0x' + [11559732032986387107991004021392285783925812861821192530917403151452391805634n, 10857046999023057135944570762232829481370756359578518086990519993285655852781n,
+ 4082367875863433681332203403145435568316851327593401208105741076214120093531n, 8495653923123431417604973247489272438418190587263600148770280649306958101930n].map(word => word.toString(16).padStart(64, '0')).join('');
+const beaconFixtures = liveSets['arc-testnet-drand'].fixtures.map(([, f]) => f);
+const roundOf = f => sdk.decodeBeaconRound(attestationOf(f).attestation.data);
+assert.equal(new Set(beaconFixtures.map(f => f.context.epochId)).size, 2);
+for (const f of beaconFixtures) {
+ const recipe = f.epoch.catalog.recipeBook[11], registration = recipe.beacon, {canonicalRequest, attestation} = attestationOf(f), round = roundOf(f);
+ assert.deepEqual(f.epoch.catalog.recipes, [11]);
+ assert.equal(canonicalRequest, recipe.canonicalRequest);
+ // The registration is drand's evmnet, and the recipe is the one registerBeacon appends for it.
+ assert.deepEqual({chainHash: registration.chainHash, publicKey: registration.publicKey, genesis: registration.genesis, period: registration.period},
+  {chainHash: sdk.DRAND_EVMNET.chainHash, publicKey: sdk.DRAND_EVMNET.publicKey, genesis: sdk.DRAND_EVMNET.genesis, period: sdk.DRAND_EVMNET.period});
+ assert.equal(sdk.beaconCanonicalRequest(registration.chainHash), recipe.canonicalRequest);
+ assert.equal(recipe.body, recipe.canonicalRequest);
+ assert.equal(recipe.template, sdk.BEACON_TEMPLATE);
+ assert.equal(sdk.beaconSlotSigner(registration), f.epoch.catalog.signers[0]); // what slotSigner(recipe) returns on chain
+ assert.equal(getBytes(attestation.signature).length, 64);
+ assert.equal(attestation.timestamp, sdk.beaconRoundTime(registration, round));
+ assert.equal(sdk.beaconRoundAt(registration, attestation.timestamp), round);
+ assert.equal(sdk.encodeBeaconRound(round), attestation.data);
+ assert(sdk.verifyBeaconRound(registration.publicKey, round, attestation.signature));
+ assert(!sdk.verifyBeaconRound(registration.publicKey, round + 1n, attestation.signature));
+ assert(!sdk.verifyBeaconRound(g2Generator, round, attestation.signature));
+ const replay = change => () => epoch.replayEpochCommitment(withAttestation(f, change));
+ const replayCatalog = change => () => epoch.replayEpochCommitment(withCatalog(f, change));
+ const withBeacon = beacon => catalog => ({...catalog, recipeBook: {...catalog.recipeBook, 11: {...recipe, beacon}}});
+ const otherSignature = '0x' + JSON.parse(readFileSync('drand-rounds.json','utf8')).rounds[1].signature; // a genuine signature of another round
+ // A tampered signature, a signature of another round or malformed coordinates and lengths: no beacon epoch.
+ assert.throws(replay(a => ({signature: flipByte(a.signature, 5)})), /Invalid beacon signature/);
+ assert.throws(replay(a => ({signature: flipByte(a.signature, 40)})), /Invalid beacon signature/);
+ assert.throws(replay(() => ({signature: otherSignature})), /Invalid beacon signature/);
+ assert.throws(replay(() => ({signature: '0x' + 'ff'.repeat(64)})), /Invalid beacon signature/);
+ assert.throws(replay(() => ({signature: '0x' + '00'.repeat(64)})), /Invalid beacon signature/);
+ assert.throws(replay(a => ({signature: hexlify(getBytes(a.signature).slice(0, 63))})), /Invalid beacon signature/);
+ assert.throws(replay(a => ({signature: a.signature + '00'})), /Invalid beacon signature/);
+ // A wrong round: the data no longer matches the scheduled time, or matches it but is not what the signature signs.
+ assert.throws(replay(() => ({data: sdk.encodeBeaconRound(round + 1n)})), /attestation time/);
+ assert.throws(replay(() => ({data: sdk.encodeBeaconRound(round + 1n), timestamp: sdk.beaconRoundTime(registration, round + 1n)})), /Invalid beacon signature/);
+ assert.throws(replay(() => ({data: sdk.encodeBeaconRound(round - 1n), timestamp: sdk.beaconRoundTime(registration, round - 1n)})), /Invalid beacon signature/);
+ for (const data of ['0x30', utf8('0' + round), utf8(`${round}0`.repeat(3)), utf8(`${round}.0`), '0x']) assert.throws(replay(() => ({data})), /Invalid exact epoch data/);
+ assert.throws(replay(a => ({timestamp: a.timestamp - 3n})), /attestation time/);
+ // A wrong slot signer: the catalog must list the identity this registration derives.
+ assert.throws(replayCatalog(catalog => ({...catalog, signers: ['0x' + '11'.repeat(20)]})), /Wrong epoch signer/);
+ assert.throws(replayCatalog(catalog => ({...catalog, signers: [getAddress('0x' + '00'.repeat(19) + '01')]})), /Wrong epoch signer/);
+ // A missing registration: without it the recipe reads as a signed one and fails closed, and a missing recipe is unknown.
+ assert.throws(replayCatalog(withBeacon(undefined)), /65-byte/);
+ assert.throws(replayCatalog(catalog => ({...catalog, recipeBook: {}})), /Unknown epoch recipe 11/);
+ assert.throws(replayCatalog(catalog => ({...catalog, recipeBook: undefined})), /Unknown epoch recipe 11/);
+ // A registration that is not the registered one: another key, another schedule, another chain or no verifier.
+ assert.throws(replayCatalog(withBeacon({...registration, publicKey: g2Generator})), /Invalid beacon signature/);
+ assert.throws(replayCatalog(withBeacon({...registration, genesis: registration.genesis + 3n})), /attestation time/);
+ assert.throws(replayCatalog(withBeacon({...registration, period: registration.period + 1n})), /attestation time/);
+ assert.throws(replayCatalog(withBeacon({...registration, chainHash: '0x' + '22'.repeat(32)})), /chain hash/);
+ assert.throws(replayCatalog(withBeacon({...registration, verifier: ZeroAddress})), /Invalid beacon registration/);
+ assert.throws(replayCatalog(withBeacon({...registration, publicKey: '0x' + '00'.repeat(127)})), /Invalid beacon registration/);
+ assert.throws(replayCatalog(catalog => ({...catalog, recipeBook: {11: {...recipe, template: epoch.BUILTIN_EPOCH_RECIPES[2].template}}})), /one round number/);
+ // The same checks through replayCoordinator.
+ assert.throws(() => sdk.replayCoordinator({...f, epoch: withAttestation(f, a => ({signature: flipByte(a.signature, 5)}))}), /Invalid beacon signature/);
+ assert.throws(() => sdk.replayCoordinator({...f, epoch: withCatalog(f, withBeacon(undefined))}), /65-byte/);
+ assert.throws(() => sdk.replayCoordinator({...f, context: {...f.context, epochId: f.context.epochId + 1n}}));
+ assert.throws(() => sdk.replayCoordinator({...f, context: {...f.context, epochHash: '0x' + '00'.repeat(32)}}));
+ assert.throws(() => sdk.replayCoordinator({...f, context: {...f.context, targetBlock: f.context.targetBlock - 1n}}));
+}
+// Drand rounds fetched from four public relays, with hash-to-curve points computed by another library (see the file's own source field).
+const drand = JSON.parse(readFileSync('drand-rounds.json','utf8')), evmnetKey = '0x' + drand.info.public_key;
+assert.deepEqual({chainHash: '0x' + drand.info.hash, publicKey: evmnetKey, genesis: BigInt(drand.info.genesis_time), period: BigInt(drand.info.period)},
+ {chainHash: sdk.DRAND_EVMNET.chainHash, publicKey: sdk.DRAND_EVMNET.publicKey, genesis: sdk.DRAND_EVMNET.genesis, period: sdk.DRAND_EVMNET.period});
+assert.equal(drand.info.schemeID, 'bls-bn254-unchained-on-g1');
+for (const {round, signature, randomness} of drand.rounds) {
+ const point = drand.messagePoints.points.find(candidate => candidate.round === round);
+ assert.deepEqual(sdk.beaconRoundMessage(BigInt(round)), {x: BigInt(point.x), y: BigInt(point.y)});
+ assert.equal(createHash('sha256').update(Buffer.from(signature, 'hex')).digest('hex'), randomness); // drand's randomness is the hash of the signature
+ assert(sdk.verifyBeaconRound(evmnetKey, BigInt(round), '0x' + signature));
+ assert(!sdk.verifyBeaconRound(evmnetKey, BigInt(round) + 1n, '0x' + signature));
+ assert(!sdk.verifyBeaconRound(evmnetKey, BigInt(round), '0x' + drand.rounds.find(candidate => candidate.round !== round).signature));
+ assert.equal(sdk.beaconRoundTime(sdk.DRAND_EVMNET, BigInt(round)), sdk.DRAND_EVMNET.genesis + BigInt(round - 1) * sdk.DRAND_EVMNET.period);
+}
+// Malformed input is false, not an exception; out-of-range rounds and keys are refused.
+const [{signature: drandSignature}] = drand.rounds;
+for (const [key, round, signature] of [[evmnetKey.slice(0, -2), 1n, '0x' + drandSignature], ['0x', 1n, '0x' + drandSignature], [evmnetKey, 1n, '0x' + drandSignature.slice(2)], [evmnetKey, 1n, '0x'],
+ [evmnetKey, 2n ** 64n, '0x' + drandSignature], [evmnetKey, -1n, '0x' + drandSignature], [evmnetKey, 1n, '0x' + 'ff'.repeat(64)], ['0x' + 'ff'.repeat(128), 1n, '0x' + drandSignature]]) assert.equal(sdk.verifyBeaconRound(key, round, signature), false);
+assert.throws(() => sdk.beaconRoundMessage(2n ** 64n));
+assert.throws(() => sdk.beaconRoundTime(sdk.DRAND_EVMNET, 0n));
+assert.equal(sdk.beaconRoundAt(sdk.DRAND_EVMNET, sdk.DRAND_EVMNET.genesis - 1n), 0n);
+assert.equal(sdk.beaconRoundAt(sdk.DRAND_EVMNET, sdk.DRAND_EVMNET.genesis), 1n);
+assert.equal(sdk.beaconRoundAt(sdk.DRAND_EVMNET, sdk.DRAND_EVMNET.genesis + 5n), 2n);
+assert.equal(sdk.decodeBeaconRound(utf8('21072526')), 21072526n);
+for (const bad of ['0x', '0x30', utf8('007'), utf8('1'.repeat(20)), utf8('1.5'), utf8(' 1')]) assert.throws(() => sdk.decodeBeaconRound(bad), /Invalid beacon round data/);
+assert.throws(() => sdk.encodeBeaconRound(0n));
+assert.throws(() => sdk.beaconCanonicalRequest('0x1234'));
+// readEpochRecipes reads getRecipe, asks for beaconOf only for a recipe that names drand, and reads as of the block tag it is given.
+const REGISTRY = '0xD20Da00B47A7cD2211dC4683E306913b05903756';
+const registryReader = (book, seen) => ({async call(tx) {
+ assert.equal(tx.to, REGISTRY);
+ const call = registry.parseTransaction({data: tx.data}), id = Number(call.args[0]), entry = book[id];
+ seen.push([call.name, id, tx.blockTag]);
+ if (call.name === 'getRecipe') return registry.encodeFunctionResult('getRecipe', [keccak256(toUtf8Bytes(entry.canonicalRequest)), entry.canonicalRequest, entry.template, entry.body]);
+ assert.equal(call.name, 'beaconOf');
+ const b = entry.beacon;
+ return registry.encodeFunctionResult('beaconOf', [b ? [b.verifier, b.genesis, b.period, b.chainHash, b.publicKey] : [ZeroAddress, 0n, 0n, ZeroHash, '0x']]);
+}});
+const seen = [], beaconBook = beaconFixtures[0].epoch.catalog.recipeBook;
+assert.deepEqual(await epoch.readEpochRecipes(registryReader(beaconBook, seen), REGISTRY, [11], {blockTag: 64713483}), beaconBook);
+assert.deepEqual(seen, [['getRecipe', 11, 64713483], ['beaconOf', 11, 64713483]]);
+seen.length = 0;
+assert.deepEqual(await epoch.readEpochRecipes(registryReader(beaconBook, seen), REGISTRY, [11]), beaconBook);
+assert.deepEqual(seen, [['getRecipe', 11, undefined], ['beaconOf', 11, undefined]]);
+seen.length = 0;
+const signedBook = signedFixtures[0].epoch.catalog.recipeBook;
+assert.deepEqual(await epoch.readEpochRecipes(registryReader(signedBook, seen), REGISTRY, Object.keys(signedBook).map(Number), {blockTag: 'latest'}), signedBook);
+assert(seen.length === Object.keys(signedBook).length && seen.every(([name, , blockTag]) => name === 'getRecipe' && blockTag === 'latest'));
+// A recipe read from the registry that is not what registerBeacon appends for its registration is refused.
+assert.throws(() => epoch.validateEpochRecipe({...beaconBook[11], beacon: {...beaconBook[11].beacon, chainHash: '0x' + '33'.repeat(32)}}), /chain hash/);
+assert.throws(() => epoch.validateEpochRecipe({...beaconBook[11], body: '["drand"]'}), /chain hash/);
 const mapped = sdk.mapRandomness(result.reveal.randomness,sdk.builtins.d20());
 assert(mapped.length===1 && mapped[0]>=1n && mapped[0]<=20n);
 const bundle = await build({stdin:{contents:"export * from '@d20dao/vrf-sdk'; export * from '@d20dao/vrf-sdk/abi';",resolveDir:process.cwd(),sourcefile:'public-entry.js'},bundle:true,platform:'browser',format:'esm',target:'es2022',write:false,metafile:true});
 const forbidden = Object.keys(bundle.metafile.inputs).filter(p=>/(^|\/)(keeper|test|secrets)(\/|$)|node:/.test(p.replaceAll('\\','/')));
 assert.deepEqual(forbidden,[]);
+// BN254 setup (tens of milliseconds to evaluate) is read only inside the functions that verify a round or hash to the curve, never at
+// module scope, so a bundle that reaches none of them carries none of it; a bundle that verifies carries it.
+const bytesFrom = (result, pattern) => Object.entries(Object.values(result.metafile.outputs)[0].inputs).filter(([path]) => pattern.test(path.replaceAll('\\','/'))).reduce((sum, [, input]) => sum + input.bytesInOutput, 0);
+const bundleOf = names => build({stdin:{contents:`export { ${names} } from '@d20dao/vrf-sdk';`,resolveDir:process.cwd(),sourcefile:'entry.js'},bundle:true,platform:'browser',format:'esm',target:'es2022',write:false,metafile:true});
+const bn254Code = /@noble\/curves\/esm\/(?:bn254|abstract\/(?:bls|tower))\.js/;
+for (const names of ['quoteRequestFee, builtins, mapRandomness', 'beaconRoundAt, beaconRoundTime, beaconCanonicalRequest, encodeBeaconRound, DRAND_EVMNET']) assert.equal(bytesFrom(await bundleOf(names), bn254Code), 0, names);
+for (const names of ['verifyBeaconRound', 'beaconRoundMessage', 'replayCoordinator']) assert(bytesFrom(await bundleOf(names), bn254Code) > 0, names);
+assert(bytesFrom(bundle, bn254Code) > 0);
 const browser = await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 for (const f of fixtures) assert.deepEqual(browser.replayCoordinator(f),sdk.replayCoordinator(f));
+for (const {fixtures: recorded} of Object.values(liveSets)) for (const [, f] of recorded) assert.deepEqual(browser.replayCoordinator(f),sdk.replayCoordinator(f));
 assert.deepEqual(browser.coordinatorAbi,coordinatorAbi);
 assert.deepEqual(browser.epochEntropyAbi,epochEntropyAbi);
 assert.deepEqual(browser.beaconVerifierAbi,beaconVerifierAbi);
@@ -248,5 +435,6 @@ consumer.forEachFunction(fragment=>{
  assert.deepEqual(coordinator.outputs.map(p=>p.format('sighash')),fragment.outputs.map(p=>p.format('sighash')));
 });
 console.log(fixtureProvenance.sourceMode+' recipe fixture coverage: '+coveredRecipes.join(', ')+'; legacy ANU evidence: '+legacyFixtures.length+' fixtures');
+console.log('Real Arc replay: '+Object.entries(liveSets).map(([set, {fixtures: recorded}]) => set+' '+recorded.length+' (recipes '+recipesOf(liveSets[set]).join(', ')+')').join('; ')+'; drand rounds verified: '+drand.rounds.length+'.');
 console.log('Examples compiled from the installed package and exercised: '+exampleNames.join(', ')+'.');
 console.log('Current epoch/VRF replay, ABI, off-chain fee quoting, strict TypeScript, browser-target bundle ('+bundle.outputFiles[0].contents.length+' bytes) and Solidity checks passed.');

@@ -1,0 +1,50 @@
+{
+  "sourceMode": "live Arc Testnet",
+  "chainId": "5042002",
+  "rpc": "https://rpc.testnet.arc.io",
+  "coordinator": "0xd20DA0FF9087d053f0291524Eac12abA1ADBd945",
+  "registry": "0xD20Da00B47A7cD2211dC4683E306913b05903756",
+  "recorder": "scripts/record-live-fixture.mjs",
+  "note": "Accepted Arc Testnet requests served by signed-record epochs, recorded 2026-10-01 from the public RPC: the initial catalog [0,1,2,3] (epochs before 966; request 120 was published by the registry's first implementation, before the recipe registry) and the passthrough catalog [6,7,8,9,10] (epochs 10108 to 11318). Re-recording a request with scripts/record-live-fixture.mjs reproduces its fixture byte for byte.",
+  "fixtures": {
+    "epoch-replay-120.json": {
+      "requestId": "120",
+      "epochId": "119",
+      "source": 3,
+      "recipe": 3,
+      "catalog": "[0,1,2,3]",
+      "requestBlock": "62473647",
+      "committedBlock": "62473643",
+      "acceptanceBlock": "62473664",
+      "fulfillmentTransactionHash": "0xf68800651f6cc185bdfc188fac638b007914228ae030a7860bdd67e4575fc133",
+      "registryImplementation": "0xD20Da0cf7Ddc6123f9A87c0C210F8ECB934CA7D5",
+      "coordinatorImplementation": "0xD20da0c375cEfCdA65703699A4090237057e9b68"
+    },
+    "epoch-replay-5633.json": {
+      "requestId": "5633",
+      "epochId": "10108",
+      "source": 4,
+      "recipe": 10,
+      "catalog": "[6,7,8,9,10]",
+      "requestBlock": "64471271",
+      "committedBlock": "64471272",
+      "acceptanceBlock": "64471275",
+      "fulfillmentTransactionHash": "0x282a33dc5fac140318557b00388fffa1a000df8fa9d2b6648494de65e5af9e36",
+      "registryImplementation": "0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865",
+      "coordinatorImplementation": "0xD20da000125643B4db5A6A36A3b853c17745DF44"
+    },
+    "epoch-replay-5639.json": {
+      "requestId": "5639",
+      "epochId": "10111",
+      "source": 3,
+      "recipe": 9,
+      "catalog": "[6,7,8,9,10]",
+      "requestBlock": "64471869",
+      "committedBlock": "64471871",
+      "acceptanceBlock": "64471874",
+      "fulfillmentTransactionHash": "0x7be9ab39c92a05b374d0271a138e4fa56d1c1be0b0ac846dc83354fe71a8bb68",
+      "registryImplementation": "0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865",
+      "coordinatorImplementation": "0xD20da000125643B4db5A6A36A3b853c17745DF44"
+    }
+  }
+}

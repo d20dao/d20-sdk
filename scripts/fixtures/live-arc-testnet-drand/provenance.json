@@ -1,0 +1,37 @@
+{
+  "sourceMode": "live Arc Testnet",
+  "chainId": "5042002",
+  "rpc": "https://rpc.testnet.arc.io",
+  "coordinator": "0xd20DA0FF9087d053f0291524Eac12abA1ADBd945",
+  "registry": "0xD20Da00B47A7cD2211dC4683E306913b05903756",
+  "recorder": "scripts/record-live-fixture.mjs",
+  "note": "Accepted Arc Testnet requests served by drand beacon epochs (recipe 11, catalog [11] from epoch 11319), recorded 2026-10-01 from the public RPC. The epoch packet carries the drand round number as data, the round's scheduled time as timestamp and the 64-byte BLS signature that D20BeaconVerifier accepted on chain; the catalog's recipe book carries the beaconOf registration. Registry upgrade at block 64712965, registerBeacon at block 64713109, catalog scheduled at block 64713203. Re-recording a request with scripts/record-live-fixture.mjs reproduces its fixture byte for byte.",
+  "fixtures": {
+    "epoch-replay-5655.json": {
+      "requestId": "5655",
+      "epochId": "11319",
+      "source": 0,
+      "recipe": 11,
+      "catalog": "[11]",
+      "requestBlock": "64713480",
+      "committedBlock": "64713483",
+      "acceptanceBlock": "64713487",
+      "fulfillmentTransactionHash": "0x8bec7ec5ae06e0e8d3d568844d430899d7588243724f6e965803800ed0777684",
+      "registryImplementation": "0xD20dA0853a6f894c0cdc9018fD4F8F67Eac15704",
+      "coordinatorImplementation": "0xD20da000125643B4db5A6A36A3b853c17745DF44"
+    },
+    "epoch-replay-5812.json": {
+      "requestId": "5812",
+      "epochId": "12169",
+      "source": 0,
+      "recipe": 11,
+      "catalog": "[11]",
+      "requestBlock": "64883518",
+      "committedBlock": "64883520",
+      "acceptanceBlock": "64883524",
+      "fulfillmentTransactionHash": "0xb52188ff880476a6ec051ebc02e7f83a89af13532ac4b2fcac1c1a7b67e11f03",
+      "registryImplementation": "0xD20dA0853a6f894c0cdc9018fD4F8F67Eac15704",
+      "coordinatorImplementation": "0xD20da000125643B4db5A6A36A3b853c17745DF44"
+    }
+  }
+}

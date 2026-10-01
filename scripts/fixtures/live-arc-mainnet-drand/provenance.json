@@ -1,0 +1,37 @@
+{
+  "sourceMode": "live Arc Mainnet",
+  "chainId": "5042",
+  "rpc": "https://rpc.mainnet.arc.io",
+  "coordinator": "0xd20da057469C45928912d983F45790C41e290571",
+  "registry": "0xd20Da048C1A68fa3Bc0B5f5Bc454D1530062C82D",
+  "recorder": "scripts/record-live-fixture.mjs",
+  "note": "Accepted Arc Mainnet requests served by the first drand beacon epoch, 12448 (recipe 11, catalog [11] from epoch 12448, whose first block is 23731060, on 2026-10-01), recorded 2026-10-01 from the public RPC: request 40, a raw word asked for by the cost client, and request 41, a d20 roll whose mapped value is 11. The epoch was published in block 23731100 with drand round 21115909, the round current at the epoch's start. Registry upgrade (which registered the beacon) at block 23724929, catalog scheduled at block 23726387. Re-recording a request with scripts/record-live-fixture.mjs reproduces its fixture byte for byte.",
+  "fixtures": {
+    "epoch-replay-40.json": {
+      "requestId": "40",
+      "epochId": "12448",
+      "source": 0,
+      "recipe": 11,
+      "catalog": "[11]",
+      "requestBlock": "23731099",
+      "committedBlock": "23731100",
+      "acceptanceBlock": "23731104",
+      "fulfillmentTransactionHash": "0xa16b1b9db54e5fdb6682ef38f1fba99aaec80c7f5f514d4dae03d03a4130772e",
+      "registryImplementation": "0xD20dA0853a6f894c0cdc9018fD4F8F67Eac15704",
+      "coordinatorImplementation": "0xD20da000125643B4db5A6A36A3b853c17745DF44"
+    },
+    "epoch-replay-41.json": {
+      "requestId": "41",
+      "epochId": "12448",
+      "source": 0,
+      "recipe": 11,
+      "catalog": "[11]",
+      "requestBlock": "23731227",
+      "committedBlock": "23731100",
+      "acceptanceBlock": "23731229",
+      "fulfillmentTransactionHash": "0xe3eca09079e7c4d0a9e3d54f0e4dc058acb9348b37b8c8804d5a8f813e97b530",
+      "registryImplementation": "0xD20dA0853a6f894c0cdc9018fD4F8F67Eac15704",
+      "coordinatorImplementation": "0xD20da000125643B4db5A6A36A3b853c17745DF44"
+    }
+  }
+}

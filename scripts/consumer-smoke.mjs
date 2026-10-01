@@ -157,8 +157,8 @@ for (const f of legacyFixtures) {
  if (Number(f.epoch.record.source) === 1) assert.throws(() => sdk.replayCoordinator(f), /Epoch recipe mismatch/);
  else assert.equal(sdk.replayCoordinator(f).reveal.randomness, f.recorded.randomness);
 }
-// Real Arc data, recorded with scripts/record-live-fixture.mjs from the public RPCs: signed-record epochs of both networks and
-// the drand beacon epochs of Arc Testnet. Every accepted request replays through the public API to the word the chain recorded.
+// Real Arc data, recorded with scripts/record-live-fixture.mjs from the public RPCs: signed-record and drand beacon epochs of
+// both networks. Every accepted request replays through the public API to the word the chain recorded.
 const revive = (_key,value) => typeof value === 'string' && /^[0-9]+$/.test(value) ? BigInt(value) : value;
 const liveNames = JSON.parse(readFileSync('live-fixture-names.json','utf8'));
 const liveSets = Object.fromEntries(Object.entries(liveNames).map(([set, names]) => [set, {
@@ -169,10 +169,12 @@ const recipesOf = ({fixtures: recorded}) => recorded.map(([, f]) => recipeOf(f))
 assert.deepEqual(recipesOf(liveSets['arc-mainnet-signed']), [0,1,2,2,4,5,6,7,8]);
 assert.deepEqual(recipesOf(liveSets['arc-testnet-signed']), [3,9,10]);
 assert.deepEqual(recipesOf(liveSets['arc-testnet-drand']), [11,11]);
+assert.deepEqual(recipesOf(liveSets['arc-mainnet-drand']), [11,11]);
 // Each network's signed set holds epochs of its initial catalog and of a scheduled catalog.
 for (const set of ['arc-mainnet-signed', 'arc-testnet-signed']) assert(liveSets[set].fixtures.some(([, f]) => f.epoch.catalog.recipes === undefined) && liveSets[set].fixtures.some(([, f]) => f.epoch.catalog.recipes !== undefined), set);
 for (const [set, {provenance, fixtures: recorded}] of Object.entries(liveSets)) {
  assert.match(provenance.sourceMode, /^live Arc (?:Mainnet|Testnet)$/);
+ assert.equal(set.startsWith('arc-mainnet'), provenance.sourceMode.endsWith('Mainnet'));
  assert.deepEqual(Object.keys(provenance.fixtures).sort(), recorded.map(([name]) => name).sort());
  for (const [name, f] of recorded) {
   const entry = provenance.fixtures[name];
@@ -222,9 +224,11 @@ for (const f of signedFixtures) {
 // A beacon epoch commits one drand round: the round number as data, its scheduled time and the beacon's 64-byte BLS signature.
 const g2Generator = '0x' + [11559732032986387107991004021392285783925812861821192530917403151452391805634n, 10857046999023057135944570762232829481370756359578518086990519993285655852781n,
  4082367875863433681332203403145435568316851327593401208105741076214120093531n, 8495653923123431417604973247489272438418190587263600148770280649306958101930n].map(word => word.toString(16).padStart(64, '0')).join('');
-const beaconFixtures = liveSets['arc-testnet-drand'].fixtures.map(([, f]) => f);
+const testnetBeacon = liveSets['arc-testnet-drand'].fixtures.map(([, f]) => f), mainnetBeacon = liveSets['arc-mainnet-drand'].fixtures.map(([, f]) => f);
+const beaconFixtures = [...testnetBeacon, ...mainnetBeacon];
 const roundOf = f => sdk.decodeBeaconRound(attestationOf(f).attestation.data);
-assert.equal(new Set(beaconFixtures.map(f => f.context.epochId)).size, 2);
+assert.equal(new Set(testnetBeacon.map(f => f.context.epochId)).size, 2);
+assert.deepEqual([...new Set(mainnetBeacon.map(f => f.context.epochId))], [12448n]); // both requests are in the first Arc Mainnet drand epoch
 for (const f of beaconFixtures) {
  const recipe = f.epoch.catalog.recipeBook[11], registration = recipe.beacon, {canonicalRequest, attestation} = attestationOf(f), round = roundOf(f);
  assert.deepEqual(f.epoch.catalog.recipes, [11]);
@@ -283,6 +287,18 @@ for (const f of beaconFixtures) {
  assert.throws(() => sdk.replayCoordinator({...f, context: {...f.context, epochHash: '0x' + '00'.repeat(32)}}));
  assert.throws(() => sdk.replayCoordinator({...f, context: {...f.context, targetBlock: f.context.targetBlock - 1n}}));
 }
+// Both networks registered the same beacon, so its registration and the catalog's signer are the same. The first Arc Mainnet drand
+// epoch served a raw word asked for before its publication (request 40) and a d20 roll asked for after it (request 41).
+assert.deepEqual(mainnetBeacon[0].epoch.catalog.recipeBook[11], testnetBeacon[0].epoch.catalog.recipeBook[11]);
+assert.deepEqual(mainnetBeacon[0].epoch.catalog.signers, testnetBeacon[0].epoch.catalog.signers);
+const [rawRequest, rollRequest] = mainnetBeacon;
+assert.deepEqual([rawRequest.context.requestId, rollRequest.context.requestId], [40n, 41n]);
+assert.deepEqual(rawRequest.context.mapping, sdk.builtins.raw());
+assert.deepEqual(rollRequest.context.mapping, sdk.builtins.d20());
+assert.equal(rawRequest.context.targetBlock, rawRequest.epoch.record.committedBlock + 1n);
+assert.equal(rollRequest.context.targetBlock, rollRequest.context.requestBlock);
+assert.deepEqual(sdk.replayCoordinator(rawRequest).map.values, [BigInt(rawRequest.recorded.randomness)]);
+assert.deepEqual(sdk.replayCoordinator(rollRequest).map.values, [11n]);
 // Drand rounds fetched from four public relays, with hash-to-curve points computed by another library (see the file's own source field).
 const drand = JSON.parse(readFileSync('drand-rounds.json','utf8')), evmnetKey = '0x' + drand.info.public_key;
 assert.deepEqual({chainHash: '0x' + drand.info.hash, publicKey: evmnetKey, genesis: BigInt(drand.info.genesis_time), period: BigInt(drand.info.period)},

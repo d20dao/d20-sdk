@@ -64,8 +64,10 @@ for (const text of values.requests.split(',')) {
   const requestId = BigInt(text);
   const request = await coordinator.getRequest(requestId);
   if (!request.fulfilled) throw new Error(`Request ${requestId} is not fulfilled`);
-  // The proof is accepted after the target block and at most 60 seconds after the request; this window has room to spare.
-  const fulfilled = await logOf(values.coordinator, coordinatorInterface, 'RandomnessFulfilled', requestId, Number(request.targetBlock), Number(request.requestBlock) + 2000);
+  // The proof is accepted after the target block and at most 60 seconds after the request; this window has room to spare,
+  // and it ends at the chain head for a request that is only minutes old.
+  const head = await provider.getBlockNumber();
+  const fulfilled = await logOf(values.coordinator, coordinatorInterface, 'RandomnessFulfilled', requestId, Number(request.targetBlock), Math.min(Number(request.requestBlock) + 2000, head));
   const acceptanceBlock = BigInt(fulfilled.log.blockNumber);
   const evidence = await logOf(values.coordinator, coordinatorInterface, 'FulfillmentEvidence', requestId, fulfilled.log.blockNumber, fulfilled.log.blockNumber);
   const mapping = await coordinator.getMapping(requestId);

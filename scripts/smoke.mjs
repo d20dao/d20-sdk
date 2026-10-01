@@ -56,9 +56,10 @@ const legacyDirectory = resolve(pkg, 'scripts/fixtures/live-on-demand');
 const legacyNames = readdirSync(legacyDirectory).filter(name => /^epoch-replay.*\.json$/.test(name)).sort();
 for (const name of legacyNames) copyFileSync(resolve(legacyDirectory, name), resolve(temp, `legacy-${name}`));
 writeFileSync(resolve(temp, 'legacy-fixture-names.json'), JSON.stringify(legacyNames.map(name => `legacy-${name}`)));
-// Real Arc data recorded with scripts/record-live-fixture.mjs: signed-record epochs of both networks and drand beacon epochs of
-// Arc Testnet. Independent drand rounds come with hash-to-curve points computed by another library.
-const liveDirectories = { 'arc-mainnet-signed': 'live-arc-mainnet-signed', 'arc-testnet-signed': 'live-arc-testnet-signed', 'arc-testnet-drand': 'live-arc-testnet-drand' };
+// Real Arc data recorded with scripts/record-live-fixture.mjs: signed-record and drand beacon epochs of both networks.
+// Independent drand rounds come with hash-to-curve points computed by another library.
+const liveDirectories = { 'arc-mainnet-signed': 'live-arc-mainnet-signed', 'arc-testnet-signed': 'live-arc-testnet-signed',
+  'arc-testnet-drand': 'live-arc-testnet-drand', 'arc-mainnet-drand': 'live-arc-mainnet-drand' };
 const liveNames = {};
 for (const [set, directory] of Object.entries(liveDirectories)) {
   const source = resolve(pkg, 'scripts/fixtures', directory);

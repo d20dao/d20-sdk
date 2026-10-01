@@ -43,8 +43,9 @@ beacon epoch's 64-byte signature with `Expected canonical 65-byte low-s EIP-191 
 - The BN254 curve comes from `@noble/curves` 1.9.7, the version already in use. It is read only inside the functions
   that verify a round, so a bundler leaves it out of a bundle that reaches none of them; importing the package in Node
   loads it, which adds about 45 ms.
-- Tests replay real Arc requests recorded from the public RPCs, with tampered-signature, wrong-round, wrong-signer and
-  missing-registration cases, and real drand rounds checked against another library's hash-to-curve points.
+- Tests replay real Arc requests recorded from the public RPCs, including the first Arc Mainnet drand epoch (12448),
+  with tampered-signature, wrong-round, wrong-signer and missing-registration cases, and real drand rounds checked
+  against another library's hash-to-curve points.
 - README and `AGENTS.md`: verification covers both record types, the catalog history replaces the single five-source
   catalog, the implementation tables list the registry upgrade and the verifier, and `protocol/` is described as a
   byte-for-byte copy of the keeper source at the pinned commit, checked by its SHA-256 list; that commit is ahead of the

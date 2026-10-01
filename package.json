@@ -28,6 +28,7 @@
     },
     "./abi/D20VRFCoordinator.json": "./abi/D20VRFCoordinator.json",
     "./abi/EpochEntropy.json": "./abi/EpochEntropy.json",
+    "./abi/D20BeaconVerifier.json": "./abi/D20BeaconVerifier.json",
     "./contracts/*": "./contracts/*",
     "./examples/*": "./examples/*",
     "./AGENTS.md": "./AGENTS.md",
@@ -47,7 +48,8 @@
     "BUILD-MANIFEST.json",
     "PROTOCOL-PROVENANCE.json",
     "abi/D20VRFCoordinator.json",
-    "abi/EpochEntropy.json"
+    "abi/EpochEntropy.json",
+    "abi/D20BeaconVerifier.json"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",

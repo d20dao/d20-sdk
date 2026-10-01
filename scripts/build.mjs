@@ -31,7 +31,7 @@ for (const name of ['.generated', 'dist', 'abi', 'contracts', 'notices']) {
   if (dirname(target) !== pkg) throw new Error('Unsafe generated output path');
   rmSync(target, { recursive: true, force: true });
 }
-const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'templates', 'epoch'];
+const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'templates', 'epoch', 'beacon'];
 const sdkModules = ['fees'];
 const toEsm = source => source.replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.js$2');
 // The public root entry is the protocol index plus these SDK-owned exports appended verbatim.
@@ -50,6 +50,7 @@ const input = {
     'contracts/D20VRFCoordinator.sol': { content: read('contracts/D20VRFCoordinator.sol') },
     'contracts/EpochEntropy.sol': { content: read('contracts/EpochEntropy.sol') },
     'contracts/D20Proxy.sol': { content: read('contracts/D20Proxy.sol') },
+    'contracts/D20BeaconVerifier.sol': { content: read('contracts/D20BeaconVerifier.sol') },
   },
   settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'cancun', outputSelection: { '*': { '*': ['abi'] } } },
 };
@@ -70,7 +71,9 @@ const abi = output.contracts['contracts/D20VRFCoordinator.sol'].D20VRFCoordinato
 put('abi/D20VRFCoordinator.json', JSON.stringify(abi, null, 2) + '\n');
 const epochEntropyAbi = output.contracts['contracts/EpochEntropy.sol'].EpochEntropy.abi;
 put('abi/EpochEntropy.json', JSON.stringify(epochEntropyAbi, null, 2) + '\n');
-put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\n`);
+const beaconVerifierAbi = output.contracts['contracts/D20BeaconVerifier.sol'].D20BeaconVerifier.abi;
+put('abi/D20BeaconVerifier.json', JSON.stringify(beaconVerifierAbi, null, 2) + '\n');
+put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\nexport const beaconVerifierAbi = ${JSON.stringify(beaconVerifierAbi)} as const;\n`);
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
   strict: true, skipLibCheck: false, declaration: true, rootDir: resolve(pkg, '.generated'), outDir: resolve(pkg, 'dist'), types: [], noEmitOnError: true };
 const program = ts.createProgram([...modules, ...sdkModules, 'abi'].map(n => resolve(pkg, `.generated/${n}.ts`)), options);
@@ -82,6 +85,7 @@ for (const path of ['D20VRFConsumer.sol', 'interfaces/ID20VRF.sol', 'libraries/D
 }
 put('LICENSE', read('LICENSE'));
 put('notices/CHAINLINK-LICENSE', read('contracts/vendor/CHAINLINK-LICENSE'));
+put('notices/BLS-BN254-LICENSE', read('contracts/vendor/bls-bn254/LICENSE'));
 put('notices/PROVENANCE.md', read('contracts/vendor/PROVENANCE.md'));
 put('BUILD-MANIFEST.json', JSON.stringify(manifest, null, 2) + '\n');
-console.log('Built public ESM/declarations, canonical coordinator/epoch registry ABIs and four consumer Solidity sources.');
+console.log('Built public ESM/declarations, canonical coordinator/epoch registry/beacon verifier ABIs and four consumer Solidity sources.');

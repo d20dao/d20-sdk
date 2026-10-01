@@ -7,10 +7,11 @@ import solc from 'solc';
 import { Interface, getBytes, getAddress } from 'ethers';
 import * as sdk from '@d20dao/vrf-sdk';
 import * as epoch from '@d20dao/vrf-sdk/epoch';
-import { coordinatorAbi, epochEntropyAbi } from '@d20dao/vrf-sdk/abi';
-const iface = new Interface(coordinatorAbi), registry = new Interface(epochEntropyAbi);
+import { coordinatorAbi, epochEntropyAbi, beaconVerifierAbi } from '@d20dao/vrf-sdk/abi';
+const iface = new Interface(coordinatorAbi), registry = new Interface(epochEntropyAbi), verifier = new Interface(beaconVerifierAbi);
 assert.deepEqual(coordinatorAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/D20VRFCoordinator.json')));
 assert.deepEqual(epochEntropyAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/EpochEntropy.json')));
+assert.deepEqual(beaconVerifierAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/D20BeaconVerifier.json')));
 for (const name of ['quoteFee','quoteFeeAt','pricing','setPricing','requestFeePaid','requestRefundBps','setRefundBps','withdrawRefundCredit','refundCredits','initialMinFee','fulfillRandomnessBatch',
  'requestRandomness','requestMappedRandomness','refundRequest','retryCallback','getRequest','epochRegistry','retryRefundCallback','refundCallbackDelivered','keeperFeeBps',
  'MAX_FULFILL_BATCH','MAX_MIN_FEE','MAX_FEE_MULTIPLIER','MIN_FULFILL_GAS_OVERHEAD','MAX_FULFILL_GAS_OVERHEAD','MIN_REFUND_BPS','RESPONSE_TIMEOUT']) assert(iface.getFunction(name), name);
@@ -39,6 +40,18 @@ for (const name of ['signersAt','catalogHashAt','anuSigner']) assert(!registry.h
 for (const name of ['EpochCommitted','CatalogScheduled','RecipeRegistered','BackupCommitterSet']) assert(registry.getEvent(name), name);
 assert.deepEqual(registry.getEvent('CatalogScheduled').inputs.map(p => p.type), ['uint64','bytes32','uint8[]','address[]']);
 for (const name of ['InvalidRecipe','InvalidTemplate','OnlyCommitter']) assert(registry.getError(name), name);
+// Beacon recipes: registerBeacon appends one, beaconOf, slotSigner and verifyBeacon read it, and the registry calls a stateless verifier.
+for (const name of ['registerBeacon','beaconOf','slotSigner','verifyBeacon','BEACON_VERIFY_GAS','BEACON_DOMAIN']) assert(registry.getFunction(name), name);
+assert.deepEqual(registry.getFunction('registerBeacon').inputs.map(p => p.type), ['address','bytes32','bytes','uint64','uint64','uint64','bytes']);
+assert.deepEqual(registry.getFunction('beaconOf').outputs[0].components.map(p => `${p.name}:${p.type}`), ['verifier:address','genesis:uint64','period:uint64','chainHash:bytes32','publicKey:bytes']);
+assert.deepEqual(registry.getFunction('verifyBeacon').inputs.map(p => p.type), ['uint8','uint64','bytes']);
+assert.equal(registry.getFunction('slotSigner').outputs[0].type, 'address');
+assert.deepEqual(registry.getEvent('BeaconRegistered').inputs.map(p => `${p.name}:${p.type}`), ['recipe:uint8','verifier:address','chainHash:bytes32','publicKey:bytes','genesis:uint64','period:uint64']);
+assert(registry.getError('BeaconGasTooLow'));
+assert.deepEqual(['isValidPublicKey','roundMessage','verifyRound','DST','PAIRING_GAS'].filter(name => verifier.hasFunction(name)), ['isValidPublicKey','roundMessage','verifyRound','DST','PAIRING_GAS']);
+assert.deepEqual(verifier.getFunction('verifyRound').inputs.map(p => p.type), ['bytes','uint64','bytes']);
+assert(verifier.getError('InsufficientGas'));
+assert.equal(verifier.deploy.inputs.length, 0);
 for (const abi of [iface,registry]) { assert(abi.getFunction('renounceOwnership')); assert(abi.getError('RenounceDisabled')); }
 assert.equal(epoch.MAX_ATTESTATION_AGE, 240n);
 assert(iface.getEvent('FulfillmentEvidence'));
@@ -152,6 +165,7 @@ const browser = await import('data:text/javascript;base64,'+Buffer.from(bundle.o
 for (const f of fixtures) assert.deepEqual(browser.replayCoordinator(f),sdk.replayCoordinator(f));
 assert.deepEqual(browser.coordinatorAbi,coordinatorAbi);
 assert.deepEqual(browser.epochEntropyAbi,epochEntropyAbi);
+assert.deepEqual(browser.beaconVerifierAbi,beaconVerifierAbi);
 assert.deepEqual(browser.decodeEvidencePacket(packet).proof,canonicalProof(fixture.vrfProof));
 // Off-chain fee quoting against a mock provider (no network): header base fee in, quoteFeeAt at the actual and buffered base fee out.
 const gwei = 10n**9n, pricing = { minFee: 8n*10n**16n, multiplier: 5n, overhead: 300_000n }, coordinatorAddress = '0x000000000000000000000000000000000000d20d';

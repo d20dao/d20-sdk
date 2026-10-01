@@ -3,7 +3,7 @@
 ## 0.5.0
 
 Replay covers drand beacon epochs. Arc Testnet draws its epochs from drand since epoch 11319 (2026-09-30) and Arc
-Mainnet since epoch <<MAINNET_BEACON_EPOCH>> (<<MAINNET_SWITCH_DATE>>). The proxy addresses are unchanged and the
+Mainnet since epoch 12448 (2026-10-01). The proxy addresses are unchanged and the
 interface a consumer calls is the same as in 0.4.0, so a consumer needs no change. Replay tools do: 0.4.0 rejects a
 beacon epoch's 64-byte signature with `Expected canonical 65-byte low-s EIP-191 signature`.
 
@@ -19,11 +19,12 @@ beacon epoch's 64-byte signature with `Expected canonical 65-byte low-s EIP-191 
   epochs ahead. A beacon recipe must be listed with its `slotSigner`.
 - New registry implementation `0xD20dA0853a6f894c0cdc9018fD4F8F67Eac15704` and verifier
   `0xd20dA01Aa16AeD6b77Cd8DDb869151802599100a` on both chains, behind the unchanged proxies: Arc Testnet from block
-  64712965, Arc Mainnet from block <<MAINNET_REGISTRY_UPGRADE_BLOCK>> (transaction <<MAINNET_REGISTRY_UPGRADE_TX>>).
+  64712965, Arc Mainnet from block 23724929 (transaction
+  `0x5a7a2fa8f15eefccee99f6bd363ce7717e65c5571c8c76396337fd8a1261a7cb`).
   `protocol/` now also carries the source of the coordinator implementation `0xD20da000125643B4db5A6A36A3b853c17745DF44`
   live since 2026-09-22: the batch gas guard and the zero minimum fee check.
 - Catalogs: Arc Testnet `[0,1,2,4,5]` from epoch 966, `[6,7,8,9,10]` from 10108 and `[11]` from 11319; Arc Mainnet
-  `[0,1,2,4,5]` from epoch 848, `[6,7,8,9,10]` from 10070 and `[11]` from <<MAINNET_BEACON_EPOCH>>.
+  `[0,1,2,4,5]` from epoch 848, `[6,7,8,9,10]` from 10070 and `[11]` from 12448.
 
 ### SDK
 
@@ -45,8 +46,9 @@ beacon epoch's 64-byte signature with `Expected canonical 65-byte low-s EIP-191 
 - Tests replay real Arc requests recorded from the public RPCs, with tampered-signature, wrong-round, wrong-signer and
   missing-registration cases, and real drand rounds checked against another library's hash-to-curve points.
 - README and `AGENTS.md`: verification covers both record types, the catalog history replaces the single five-source
-  catalog, the implementation tables list the registry upgrade and the verifier, and the public keeper repository is
-  named as the source of `protocol/`.
+  catalog, the implementation tables list the registry upgrade and the verifier, and `protocol/` is described as a
+  byte-for-byte copy of the keeper source at the pinned commit, checked by its SHA-256 list; that commit is ahead of the
+  latest release of the public keeper repository.
 - Vendored protocol re-pinned; `PROTOCOL-PROVENANCE.json` names the commit and the SHA-256 of every file, including
   the vendored bls-bn254 library, whose license ships as `notices/BLS-BN254-LICENSE`.
 

@@ -1,6 +1,6 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "98e537fb249dd0d3365b8d78e6040a9323a65a88",
+  "sourceCommit": "deee1c8d69446058d1f6dfe1866465000701d131",
   "note": "Protocol copied byte-for-byte from the committed Git blobs of the keeper source at sourceCommit, which is ahead of the latest release of the public repository named in sourceRepository. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
@@ -13,11 +13,11 @@
     "contracts/vendor/PROVENANCE.md": "56d0e087c3e3fffca95aa8a371979c32239c97a066ca02bb36ae2f0d2af46ffe",
     "contracts/vendor/VRF.sol": "98e0345fd2dd42178cad4ad16dd8b18621112078d63d0c64839c8bd01c539350",
     "src/evidence.ts": "81b6a1446b9700ec545e794b08d356411608aa655e6030cdfabd1dfa531ef457",
-    "src/index.ts": "a120030d296f518925159422873b796614ab83aef53fbe2acd89ea517d10f7d9",
+    "src/index.ts": "fb82d285b255220290351b016d64f18780d90c6d08f03c4c30377b7f10570a06",
     "src/mapping.ts": "76aa6093d55831052b56e177fc394ef6ef14183a8ab8ca6fcc2c9382efb6b83f",
     "src/replay.ts": "c97a5081e785e6a7f27987e2d4c4d9861fe8fa8cbc775b0152e337141d3d48d7",
     "src/sources.ts": "93dad72dd9b5e54a7781b642a0715317bdd8d23d107d53ce64a7e62ea960bdde",
-    "src/verification.ts": "754e39554c0c432cf1404741503f66b4199b84f39003d8e42f300a7256ffaa6a",
+    "src/verification.ts": "0dd8aca6b01bc21c4a3e5cec57edb9d3a0d24c9ce7263e50f0e5c91cb464c73f",
     "src/epoch.ts": "226f0c12f138fa4b45c0d073a5aceac4344882ecbdf9593053535ecd4e9a772a",
     "contracts/EpochEntropy.sol": "100785392042af99e710af2e13855fd44d9c1018e33220d2601f75a3cb72f441",
     "contracts/D20Proxy.sol": "83dcef3b72e2a0a4809c2d8df0d083d2a0f659fe2b3b01fadb1b2eaf8afb7286",
@@ -28,6 +28,14 @@
     "contracts/vendor/bls-bn254/BLS.sol": "887fd94553b9d6d0a247900bdb05523d3b9ef3b8ca049e2a0524a0b1a9d37e69",
     "contracts/vendor/bls-bn254/ModExp.sol": "fd91ae9291511668914b05fece03fb9bf6e2b57f7784d2edddc82456af12b495",
     "contracts/vendor/bls-bn254/LICENSE": "af36460fa628a7aca8c5b1f1b6b3615376f00212284fa0fd61a013ee982a3666",
-    "src/beacon.ts": "ab94d0702d7174405be085ac4ed4139a71c9d62929e05b93dc3f9e09f6d0a776"
+    "src/beacon.ts": "f49c24b959954b1aae5bc9226124d6e6065b212cc26d69abbcc1f73e3fe02dfc",
+    "contracts/robinhood/ArbitrumBlocks.sol": "62ac4865c082d85afa72977a73d8650f870251e6028cba27bef25b0cf11a1571",
+    "contracts/robinhood/BeaconBook.sol": "5b54e8bea081e7f5bdd174eee7ce59748f0e26764a58f0bbf5d16028af32d0cf",
+    "contracts/robinhood/D20VRFCoordinatorRobinhood.sol": "c3d2e92204cb1f6147bcc92dc727cbdb9be6c673f22f5d60bbdcaed17f9417db",
+    "contracts/robinhood/D20VRFProofVerifier.sol": "ef5ba93e800b8b1e562016d601b8b36941b5b5da80dd12e19a1d33615c100746",
+    "contracts/robinhood/LinkedRandomnessMapping.sol": "3a0c037270d67ef5ffbbeac2b61c5c7ebb1b9648259e65b4f9a5c77bf640ee47",
+    "src/round.ts": "1e3e894413d08bfb3c03b3acf9ecf0bc6c81d56f1d3f5436a218fae9708e5b73",
+    "src/drand.ts": "f52bae2e103b12b52d851cd0e026e3b00d0f54ce52f60cd80e3246cea609ab0e",
+    "src/vrf.ts": "559de04f8066375737e111536dd70500eee72a3258e80b9993c2200ac5570714"
   }
 }

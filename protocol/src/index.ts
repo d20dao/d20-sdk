@@ -17,3 +17,9 @@ export {EPOCH_LENGTH,EPOCH_RECIPE_DOMAIN,BUILTIN_EPOCH_RECIPES,INITIAL_EPOCH_REC
   validateEpochData,verifyEpochAttestation,epochCommitmentHash,encodeEpochEvidencePacket,decodeEpochEvidencePacket,
   replayEpochCommitment,epochProtocolConfigurationHash} from "./epoch.ts";
 export type {EpochCatalog,EpochSigners,EpochRecord,EpochRecipe,EpochRecipeBook,BuiltinEpochRecipe,EpochProvider,EpochProtocolConfiguration} from "./epoch.ts";
+// Round coordinators (D20VRFCoordinatorRobinhood): requests bound to a future drand round. Every name says round or ROUND.
+export {ROUND_SEED_DOMAIN,ROUND_TRANSCRIPT_DOMAIN,ROUND_CONFIG_DOMAIN,ROUND_BEACON_DOMAIN,ROUND_LEAD,ROUND_RESPONSE_TIMEOUT,ROUND_MIN_SCHEDULE_LEAD,
+  ROUND_MAX_BEACON_PERIOD,ROUND_MAX_BEACONS,roundTime,roundFor,roundBeaconIdentity,roundScheduleFromEvents,roundAt,roundRandomness,verifyRoundSignature,
+  roundSeed,roundTranscriptHash,roundConfigurationHash,roundDeadline,roundAcceptedInTime,replayRoundRequest} from "./round.ts";
+export type {RoundBeacon,RegisteredRoundBeacon,RoundBeaconLog,RoundEra,RoundSchedule,RoundSeedInput,RoundTranscriptInput,RoundConfiguration,
+  RoundRequestEvidence,RoundCheckName,RoundCheck,RoundReplayVerdict} from "./round.ts";

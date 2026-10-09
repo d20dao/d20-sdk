@@ -1,7 +1,7 @@
 {
   "sourceRepository": "https://github.com/d20dao/keeper",
-  "sourceCommit": "fa6417dc4667cc98e298c4280a4bfe98fc8b7873",
-  "note": "Protocol copied byte-for-byte from the committed Git blobs of the keeper source at sourceCommit, which is published in the public repository named in sourceRepository as release v0.5.0. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
+  "sourceCommit": "b733d8d144649bd92a16158fe0b5d48eb6b27b1f",
+  "note": "Protocol copied byte-for-byte from the committed Git blobs of the keeper source at sourceCommit, which is published in the public repository named in sourceRepository as release v0.5.1. Operator backends, keys, test fixtures and proof generation are excluded from the package.",
   "files": {
     "LICENSE": "bfdc94eef4cfbec12a9ed47bb406c8125cf4c306facf7b8d92db58f133b1a703",
     "contracts/D20VRFConsumer.sol": "9200fcd8825756ba6978e42d94b52e82e6dea9b1ba35dc506652490194e16162",

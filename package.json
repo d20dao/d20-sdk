@@ -1,6 +1,6 @@
 {
   "name": "@d20dao/vrf-sdk",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Verifiable randomness (VRF) for onchain apps: Solidity consumers, contract ABIs, fee quotes and public proof replay. Live on Arc and Robinhood Chain.",
   "publishConfig": {
     "access": "public",

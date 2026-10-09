@@ -36,7 +36,8 @@ unchanged. Arc's API is unchanged from 0.5.0.
   `scripts/record-round-fixture.mjs`, with their beacon schedule and tampered-value cases, and check that both
   coordinators implement `ID20VRF` identically.
 - README and `AGENTS.md`: both chains, how each works and the Robinhood Chain trust model.
-- Vendored protocol re-pinned to keeper commit `deee1c8d69446058d1f6dfe1866465000701d131`.
+- Vendored protocol re-pinned to keeper commit `fa6417dc4667cc98e298c4280a4bfe98fc8b7873`, published as
+  [d20dao/keeper](https://github.com/d20dao/keeper) v0.5.0, whose `deployments/` holds the Robinhood Chain manifests.
 
 ## 0.5.0
 

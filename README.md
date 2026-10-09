@@ -81,7 +81,7 @@ Arc requests bind an epoch of 200 blocks. The keeper publishes the epoch's packe
 
 **Delivery and refunds.** A typical delivery takes 5–8 seconds. If a request is not fulfilled within 60 seconds, its fee can be refunded to the request's refund address. As with any randomness service, design applications so that a party cannot cancel a request and retry for a better outcome.
 
-**Upgrades.** The coordinator is upgradeable (UUPS). The owner is currently the deployer account and is moving to a 2-of-2 Safe. Beacon changes are scheduled on chain at least 10 minutes ahead.
+**Upgrades.** The coordinator is upgradeable (UUPS). On mainnet the owner is currently the deployer account and is moving to a 2-of-2 Safe; the testnet stays with the deployer account. Beacon changes are scheduled on chain at least 10 minutes ahead.
 
 **What changes for an integrator.** The coordinator, `D20VRFCoordinatorRobinhood`, implements `ID20VRF` exactly as on Arc: the examples, `D20VRFConsumer` and `D20VRFRequests` compile and run unchanged, with the same selectors, events and errors for requesting, paying, refunding and retrying. The differences:
 

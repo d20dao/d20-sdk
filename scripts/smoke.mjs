@@ -26,11 +26,12 @@ const packed = packedInfo(['pack', '--json']);
 assert.deepEqual(dry.files.map(f => f.path), packed.files.map(f => f.path));
 const required = ['AGENTS.md', 'API.md', 'CHANGELOG.md', 'LICENSE', 'README.md', 'BUILD-MANIFEST.json', 'PROTOCOL-PROVENANCE.json', 'dist/index.js', 'dist/index.d.ts',
   'dist/abi.js', 'dist/abi.d.ts', 'dist/epoch.js', 'dist/epoch.d.ts', 'dist/beacon.js', 'dist/beacon.d.ts', 'dist/templates.js', 'dist/templates.d.ts', 'dist/fees.js', 'dist/fees.d.ts',
-  'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json', 'abi/D20BeaconVerifier.json',
+  'dist/round.js', 'dist/round.d.ts', 'dist/drand.js', 'dist/vrf.js', 'dist/networks.js', 'dist/networks.d.ts', 'dist/requests.js', 'dist/requests.d.ts', 'dist/roundevidence.js',
+  'abi/D20VRFCoordinator.json', 'abi/EpochEntropy.json', 'abi/D20BeaconVerifier.json', 'abi/D20VRFCoordinatorRobinhood.json',
   'examples/DiceConsumer.sol', 'examples/RaffleConsumer.sol', 'examples/LootDropConsumer.sol', 'notices/CHAINLINK-LICENSE', 'notices/BLS-BN254-LICENSE'];
 for (const name of required) assert(packed.files.some(f => f.path === name), `Missing ${name}`);
 for (const { path } of packed.files) {
-  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|templates|epoch|beacon|fees|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy|D20BeaconVerifier)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol)|examples\/(?:DiceConsumer|RaffleConsumer|LootDropConsumer)\.sol|notices\/(?:CHAINLINK-LICENSE|BLS-BN254-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|API\.md|CHANGELOG\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
+  assert(/^(?:dist\/(?:index|mapping|verification|sources|replay|evidence|templates|epoch|beacon|round|drand|vrf|fees|networks|requests|roundevidence|abi)\.(?:js|d\.ts)|abi\/(?:D20VRFCoordinator|EpochEntropy|D20BeaconVerifier|D20VRFCoordinatorRobinhood)\.json|contracts\/(?:D20VRFConsumer\.sol|interfaces\/ID20VRF\.sol|libraries\/(?:RandomnessMapping|D20VRFRequests)\.sol)|examples\/(?:DiceConsumer|RaffleConsumer|LootDropConsumer)\.sol|notices\/(?:CHAINLINK-LICENSE|BLS-BN254-LICENSE|PROVENANCE\.md)|package\.json|README\.md|AGENTS\.md|API\.md|CHANGELOG\.md|LICENSE|THIRD_PARTY_NOTICES\.md|BUILD-MANIFEST\.json|PROTOCOL-PROVENANCE\.json)$/.test(path), `Unexpected payload ${path}`);
 }
 const metadata = JSON.parse(readFileSync(resolve(pkg, 'package.json')));
 assert.notEqual(metadata.private, true);
@@ -71,10 +72,18 @@ for (const [set, directory] of Object.entries(liveDirectories)) {
 }
 writeFileSync(resolve(temp, 'live-fixture-names.json'), JSON.stringify(liveNames));
 copyFileSync(resolve(pkg, 'scripts/fixtures/drand-evmnet/rounds.json'), resolve(temp, 'drand-rounds.json'));
+// Real Robinhood Chain requests recorded with scripts/record-round-fixture.mjs, with the coordinator's beacon logs.
+const roundDirectory = resolve(pkg, 'scripts/fixtures/live-robinhood-mainnet');
+const roundNames = readdirSync(roundDirectory).filter(name => /^round-replay.*\.json$/.test(name)).sort();
+assert(roundNames.length > 0, 'Robinhood fixtures required');
+for (const name of [...roundNames, 'provenance.json', 'beacon-logs.json']) copyFileSync(resolve(roundDirectory, name), resolve(temp, `robinhood-mainnet-${name}`));
+writeFileSync(resolve(temp, 'round-fixture-names.json'), JSON.stringify(roundNames.map(name => `robinhood-mainnet-${name}`)));
 copyFileSync(resolve(pkg, 'scripts/consumer-smoke.mjs'), resolve(temp, 'smoke.mjs'));
 writeFileSync(resolve(temp, 'typecheck.ts'), `
 import { builtins, mapRandomness, replayCoordinator, decodeEvidencePacket, quoteRequestFee, DEFAULT_FEE_BUFFER_BPS, beaconSlotSigner, verifyBeaconRound, beaconRoundTime, DRAND_EVMNET, type RequestContext, type EpochProtocolConfiguration, type FeeQuote, type FeeQuoteProvider, type BeaconRegistration } from '@d20dao/vrf-sdk';
-import { coordinatorAbi, epochEntropyAbi, beaconVerifierAbi } from '@d20dao/vrf-sdk/abi';
+import { coordinatorAbi, epochEntropyAbi, beaconVerifierAbi, roundCoordinatorAbi } from '@d20dao/vrf-sdk/abi';
+import { replayRoundRequest, roundScheduleFromEvents, readRoundRequestEvidence, readRoundBeaconLogs, roundFor, ROUND_LEAD, type RoundRequestEvidence, type RoundReplayVerdict, type RoundSchedule, type RoundBeaconLog } from '@d20dao/vrf-sdk/round';
+import { D20_NETWORKS, getD20Network, readRequest, requestIdFromLogs, type D20Network, type RoundNetwork, type RequestState } from '@d20dao/vrf-sdk';
 import { replayEpochCommitment, readEpochRecipes, resolveEpochCatalog, BUILTIN_EPOCH_RECIPES, MAX_ATTESTATION_AGE, type EpochCatalog, type EpochRecipe, type EpochRecipeBook, type EpochSigners } from '@d20dao/vrf-sdk/epoch';
 import { encodeDataTemplate, matchesDataTemplate, type DataTemplateSegment } from '@d20dao/vrf-sdk';
 import { Interface, Contract, JsonRpcProvider } from 'ethers';
@@ -102,7 +111,20 @@ const scheduled: bigint = beaconRoundTime(registration, 1n);
 const verified: boolean = verifyBeaconRound(registration.publicKey, 1n, '0x');
 const pinned: Promise<Record<number, EpochRecipe>> = readEpochRecipes(new JsonRpcProvider('http://127.0.0.1:8545'), '0x0000000000000000000000000000000000000001', [11], { blockTag: 'latest' });
 const verifier = new Interface(beaconVerifierAbi);
-console.log(values, coordinator, registry, quote, age, matched, recipes, catalog, BUILTIN_EPOCH_RECIPES.length, beaconRecipe, beaconSigner, scheduled, verified, pinned, verifier);
+// Round coordinators: a real ethers provider satisfies the readers' provider surfaces; nothing here is executed against a network.
+const rh = D20_NETWORKS['robinhood-mainnet'];
+const rhNetwork: RoundNetwork | undefined = rh.kind === 'round' ? rh : undefined;
+const anyNetwork: D20Network | undefined = getD20Network(4663);
+const rhProvider = new JsonRpcProvider(rh.rpcUrl, 4663, { staticNetwork: true });
+const evidence: Promise<RoundRequestEvidence> = readRoundRequestEvidence(rhProvider, rh.coordinator, 1n);
+const beaconLogs: Promise<RoundBeaconLog[]> = readRoundBeaconLogs(rhProvider, rh.coordinator, { fromBlock: rhNetwork!.deploymentBlock });
+const state: Promise<RequestState> = readRequest(rhProvider, rh, 1n);
+const replayRound = (e: RoundRequestEvidence, schedule: RoundSchedule): RoundReplayVerdict => replayRoundRequest(e, { schedule });
+const firstRound: bigint = roundFor(DRAND_EVMNET, 1727521075n, ROUND_LEAD);
+const requestId: bigint = requestIdFromLogs([], rh.coordinator);
+const roundCoordinator = new Interface(roundCoordinatorAbi);
+console.log(values, coordinator, registry, quote, age, matched, recipes, catalog, BUILTIN_EPOCH_RECIPES.length, beaconRecipe, beaconSigner, scheduled, verified, pinned, verifier,
+  anyNetwork, evidence, beaconLogs, state, replayRound, firstRound, requestId, roundCoordinator, roundScheduleFromEvents);
 `);
 writeFileSync(resolve(temp, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, noEmit: true, skipLibCheck: false, types: [] }, files: ['typecheck.ts'] }));
 execFileSync(process.execPath, [resolve(temp, 'node_modules/typescript/bin/tsc'), '-p', resolve(temp, 'tsconfig.json')], { cwd: temp, stdio: 'inherit' });

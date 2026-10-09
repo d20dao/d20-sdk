@@ -8,7 +8,8 @@ import solc from 'solc';
 import { Interface, getBytes, getAddress, hexlify, keccak256, toUtf8Bytes, ZeroAddress, ZeroHash } from 'ethers';
 import * as sdk from '@d20dao/vrf-sdk';
 import * as epoch from '@d20dao/vrf-sdk/epoch';
-import { coordinatorAbi, epochEntropyAbi, beaconVerifierAbi } from '@d20dao/vrf-sdk/abi';
+import * as round from '@d20dao/vrf-sdk/round';
+import { coordinatorAbi, epochEntropyAbi, beaconVerifierAbi, roundCoordinatorAbi } from '@d20dao/vrf-sdk/abi';
 const iface = new Interface(coordinatorAbi), registry = new Interface(epochEntropyAbi), verifier = new Interface(beaconVerifierAbi);
 assert.deepEqual(coordinatorAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/D20VRFCoordinator.json')));
 assert.deepEqual(epochEntropyAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/EpochEntropy.json')));
@@ -370,6 +371,165 @@ assert.deepEqual(browser.coordinatorAbi,coordinatorAbi);
 assert.deepEqual(browser.epochEntropyAbi,epochEntropyAbi);
 assert.deepEqual(browser.beaconVerifierAbi,beaconVerifierAbi);
 assert.deepEqual(browser.decodeEvidencePacket(packet).proof,canonicalProof(fixture.vrfProof));
+// Robinhood Chain: the round coordinator. Its consumer interface is ID20VRF, the same as Arc's, so a consumer compiled for Arc calls it
+// unchanged; requests are read with getRoundRequest instead of getRequest.
+const roundIface = new Interface(roundCoordinatorAbi);
+assert.deepEqual(roundCoordinatorAbi, JSON.parse(readFileSync('node_modules/@d20dao/vrf-sdk/abi/D20VRFCoordinatorRobinhood.json')));
+assert.deepEqual(browser.roundCoordinatorAbi, roundCoordinatorAbi);
+assert(!roundIface.hasFunction('requestFee') && !roundIface.hasFunction('getRequest') && roundIface.hasFunction('getRoundRequest'));
+for (const name of ['quoteFee','quoteFeeAt','pricing','requestFeePaid','requestRefundBps','refundRequest','retryCallback','retryRefundCallback','withdrawRefundCredit','getMapping',
+ 'roundAt','roundTime','roundRandomness','getBeacon','beaconIdentity','beaconSchedule','ROUND_LEAD','RESPONSE_TIMEOUT','MAX_CALLBACK_GAS']) assert(roundIface.getFunction(name), name);
+for (const name of ['RandomnessRequested','RandomnessFulfilled','CallbackAttempted','RequestRefundedTo','FeeOverpaymentCredited','MappingRequested'])
+ assert.equal(roundIface.getEvent(name).topicHash, iface.getEvent(name).topicHash, name);
+for (const name of ['IncorrectFee','InvalidCallbackGas','ContractConsumerRequired','UnknownRequest','NotFulfilled','RefundNotAvailable','InsufficientCallbackGas'])
+ assert.equal(roundIface.getError(name).selector, iface.getError(name).selector, name);
+const roundOutputs = roundIface.getFunction('getRoundRequest').outputs[0].components.map(p => p.name);
+assert.deepEqual(roundOutputs, ['consumer','callbackGasLimit','requestBlock','deadline','refundAddress','clientSeed','mappingHash','beaconId','round','roundRandomness','randomness','proofHash','transcriptHash','feePaid','fulfilled','delivered','refunded']);
+// The /round entry is the root's round module, plus nothing else of the protocol.
+for (const name of ['replayRoundRequest','roundScheduleFromEvents','roundAt','roundFor','roundSeed','verifyRoundSignature','readRoundRequestEvidence','readRoundBeaconLogs']) assert.equal(round[name], sdk[name], name);
+assert(!('replayCoordinator' in round));
+assert.equal(round.ROUND_LEAD, 3n); assert.equal(round.ROUND_RESPONSE_TIMEOUT, 60n);
+// Networks: Arc runs the epoch coordinator, Robinhood Chain the round coordinator.
+assert.deepEqual(Object.keys(sdk.D20_NETWORKS), ['arc-mainnet','arc-testnet','robinhood-mainnet','robinhood-testnet']);
+assert.deepEqual(Object.values(sdk.D20_NETWORKS).map(n => [n.chainId, n.kind]), [[5042n,'epoch'],[5042002n,'epoch'],[4663n,'round'],[46630n,'round']]);
+assert.equal(sdk.getD20Network(4663).coordinator, '0xEc8b95B168c87294c45727Bd2ac903d09316D132');
+assert.equal(sdk.getD20Network(46630n).coordinator, '0x2f26513DE4Ed388947f5d22FD395D5E06f472f05');
+assert.equal(sdk.getD20Network(5042).coordinator, '0xd20da057469C45928912d983F45790C41e290571');
+assert.equal(sdk.getD20Network(1), undefined);
+for (const n of Object.values(sdk.D20_NETWORKS)) for (const [key, value] of Object.entries(n)) if (typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value)) assert.equal(getAddress(value), value, `${n.name}.${key}`);
+// Real Robinhood Chain requests, recorded with scripts/record-round-fixture.mjs from the public RPC: every check of the replay passes,
+// the drand round is the one the schedule assigns, and the word and mapped values are what the chain recorded.
+const roundSet = JSON.parse(readFileSync('round-fixture-names.json','utf8'));
+const roundProvenance = JSON.parse(readFileSync('robinhood-mainnet-provenance.json','utf8'));
+const roundFixtures = roundSet.map(name => [name.slice('robinhood-mainnet-'.length), JSON.parse(readFileSync(name,'utf8'), revive)]);
+const beaconLogs = JSON.parse(readFileSync('robinhood-mainnet-beacon-logs.json','utf8'), revive);
+const rhNetwork = sdk.D20_NETWORKS['robinhood-mainnet'];
+assert.equal(roundProvenance.sourceMode, 'live Robinhood Chain');
+assert.equal(BigInt(roundProvenance.chainId), rhNetwork.chainId);
+assert.equal(beaconLogs.fromBlock, rhNetwork.deploymentBlock);
+assert.deepEqual(Object.keys(roundProvenance.fixtures).sort(), roundFixtures.map(([name]) => name).sort());
+assert.deepEqual(roundFixtures.map(([, f]) => f.requestId), [1n, 2n]);
+const schedule = round.roundScheduleFromEvents(rhNetwork.coordinator, beaconLogs.logs);
+assert.equal(schedule.beacons.length, 1); assert.equal(schedule.pending, undefined);
+assert.deepEqual(schedule.eras, [{ beaconId: 0, since: 1791553956n }]);
+const [evmnet] = schedule.beacons;
+assert.deepEqual({ chainHash: evmnet.chainHash, publicKey: evmnet.publicKey, genesis: evmnet.genesis, period: evmnet.period }, { ...sdk.DRAND_EVMNET });
+assert.equal(evmnet.verifier, rhNetwork.beaconVerifier);
+assert.throws(() => round.roundScheduleFromEvents(rhNetwork.coordinator, beaconLogs.logs.slice(1)), /initialization|unregistered/);
+assert.throws(() => round.roundScheduleFromEvents(sdk.D20_NETWORKS['robinhood-testnet'].coordinator, beaconLogs.logs), /another address/);
+const allRoundChecks = ['keyHash','configuration','beaconIdentity','beaconInForce','assignment','roundSignature','roundRandomness','seed','proof','randomness','proofHash','evidencePacket','transcript','mappingHash','mappedResult','deadline','acceptance'];
+for (const [name, f] of roundFixtures) {
+ const entry = roundProvenance.fixtures[name];
+ assert.equal(f.chainId, rhNetwork.chainId); assert.equal(f.coordinator, rhNetwork.coordinator);
+ assert.equal(f.keyHash, rhNetwork.keyHash); assert.equal(f.configurationHash, rhNetwork.protocolConfigurationHash);
+ assert.equal(entry.coordinatorImplementation, rhNetwork.coordinatorImplementation);
+ assert.equal(BigInt(entry.round), f.round); assert.match(entry.fulfillmentTransactionHash, /^0x[0-9a-f]{64}$/);
+ const verdict = round.replayRoundRequest(f, { schedule });
+ assert.deepEqual(verdict.failed, [], name);
+ assert.deepEqual(verdict.checks.map(c => c.name), allRoundChecks);
+ assert.equal(verdict.valid, true);
+ assert.deepEqual(verdict.mappedResult, f.mappedResult);
+ assert.deepEqual(sdk.mapRandomness(f.randomness, f.mapping), f.mappedResult);
+ assert.equal(verdict.seed, f.proof.seed);
+ // The round is the first one scheduled at least ROUND_LEAD seconds after the request, so it was not public when the request was made.
+ assert(verdict.roundLeadSeconds >= 3n && verdict.roundLeadSeconds < 3n + evmnet.period, name);
+ assert.equal(String(verdict.roundLeadSeconds), entry.roundLeadSeconds);
+ assert.equal(round.roundAt(schedule, f.requestTimestamp).round, f.round);
+ assert(round.verifyRoundSignature(evmnet.publicKey, f.round, f.roundSignature));
+ assert.equal(round.roundRandomness(f.roundSignature), f.roundRandomness);
+ assert.equal(round.roundConfigurationHash(f.configuration), f.configurationHash);
+ assert.equal(sdk.hashPublicKey(f.configuration.publicKey), f.keyHash);
+ assert.equal(getBytes(f.evidencePacket).length, 416);
+ assert.deepEqual(browser.replayRoundRequest(f, { schedule }), verdict);
+ // Tampering with one recorded value fails the checks that read it.
+ const failedWith = changes => round.replayRoundRequest({ ...f, ...changes }, { schedule }).failed;
+ assert.deepEqual(failedWith({ round: f.round + 1n }), ['assignment','roundSignature','seed','transcript']);
+ assert.deepEqual(failedWith({ roundSignature: flipByte(f.roundSignature, 63) }), ['roundSignature','roundRandomness']);
+ assert.deepEqual(failedWith({ roundRandomness: flipByte(f.roundRandomness, 0) }), ['roundRandomness','seed','transcript']);
+ assert.deepEqual(failedWith({ clientSeed: flipByte(f.clientSeed, 0) }), ['seed']);
+ assert.deepEqual(failedWith({ randomness: flipByte(f.randomness, 0) }), ['randomness','transcript','mappedResult']);
+ assert.deepEqual(failedWith({ mappedResult: f.mappedResult.map(v => v + 1n) }), ['mappedResult']);
+ assert.deepEqual(failedWith({ acceptanceTimestamp: f.deadline + 1n }), ['acceptance']);
+ assert.deepEqual(failedWith({ configuration: { ...f.configuration, feeRecipient: ZeroAddress } }), ['configuration']);
+ assert.deepEqual(failedWith({ beacon: { ...f.beacon, period: 4n } }), ['beaconIdentity','assignment']);
+ assert.deepEqual(failedWith({ proof: { ...f.proof, c: f.proof.c + 1n } }), ['proof','proofHash','evidencePacket']);
+}
+// The drand evmnet rounds the Arc tests check verify under the Robinhood helpers too: one scheme, one key.
+for (const { round: number, signature, randomness } of drand.rounds) {
+ assert(round.verifyRoundSignature(sdk.DRAND_EVMNET.publicKey, BigInt(number), '0x' + signature));
+ assert.equal(round.roundRandomness('0x' + signature), '0x' + randomness);
+}
+// Assignment rules: round 1 up to genesis - ROUND_LEAD, then the first round at or after timestamp + 3 s.
+const g = sdk.DRAND_EVMNET.genesis;
+assert.deepEqual([g - 10n, g - 3n, g - 2n, g, g + 1n].map(t => round.roundFor(sdk.DRAND_EVMNET, t)), [1n, 1n, 2n, 2n, 3n]);
+assert.equal(round.roundTime(sdk.DRAND_EVMNET, 2n), g + 3n);
+assert.equal(round.roundDeadline(100n), 160n);
+assert(round.roundAcceptedInTime(100n, 160n) && !round.roundAcceptedInTime(100n, 161n) && !round.roundAcceptedInTime(100n, 99n));
+// readRoundRequestEvidence against a mock provider that serves the recorded chain state: it rebuilds the recorded evidence exactly.
+const encodeLog = (name, args, extra) => ({ address: rhNetwork.coordinator, ...roundIface.encodeEventLog(name, args), removed: false, transactionHash: '0x' + '11'.repeat(32), index: 0, ...extra });
+function roundMock(f, acceptanceBlock) {
+ const roundRequest = { consumer: f.consumer, callbackGasLimit: 100_000n, requestBlock: f.requestBlock, deadline: f.deadline, refundAddress: ZeroAddress,
+  clientSeed: f.clientSeed, mappingHash: f.mappingHash, beaconId: f.beaconId, round: f.round, roundRandomness: f.roundRandomness, randomness: f.randomness,
+  proofHash: f.proofHash, transcriptHash: f.transcriptHash, feePaid: 25_000_000_000_000n, fulfilled: true, delivered: true, refunded: false };
+ const answers = { getRoundRequest: [roundRequest], getMapping: [f.mapping], getMappedResult: [f.mappedResult], keyHash: [f.keyHash],
+  protocolConfigurationHash: [f.configurationHash], publicKeyX: [f.configuration.publicKey[0]], publicKeyY: [f.configuration.publicKey[1]],
+  initialFeeRecipient: [f.configuration.feeRecipient], initialMinFee: [f.configuration.initialMinFee],
+  getBeacon: [{ verifier: f.beacon.verifier, genesis: f.beacon.genesis, period: f.beacon.period, chainHash: f.beacon.chainHash, publicKey: f.beacon.publicKey }] };
+ const logs = [
+  encodeLog('RandomnessFulfilled', [f.requestId, f.randomness, ZeroAddress], { blockNumber: acceptanceBlock }),
+  encodeLog('FulfillmentEvidence', [f.requestId, f.transcriptHash, f.evidencePacket], { blockNumber: acceptanceBlock }),
+  encodeLog('RoundVerified', [f.beaconId, f.round, f.roundRandomness, f.roundSignature], { blockNumber: acceptanceBlock }),
+ ];
+ return {
+  async getNetwork() { return { chainId: f.chainId }; },
+  async getBlockNumber() { return acceptanceBlock + 100; },
+  async getBlock(tag) { return { number: tag, timestamp: Number(tag === Number(f.requestBlock) ? f.requestTimestamp : f.acceptanceTimestamp) }; },
+  async call(tx) {
+   const parsed = roundIface.parseTransaction({ data: tx.data });
+   if (parsed.name === 'beaconIdentity') return roundIface.encodeFunctionResult(parsed.name, [parsed.args[0] === 0n ? f.configuration.beaconIdentity : f.beacon.identity]);
+   return roundIface.encodeFunctionResult(parsed.name, answers[parsed.name]);
+  },
+  async getLogs(filter) { return logs.filter(log => log.topics[0] === filter.topics[0] && (filter.topics[1] == null || log.topics[1] === filter.topics[1])
+   && (filter.topics[2] == null || log.topics[2] === filter.topics[2]) && log.blockNumber >= filter.fromBlock && log.blockNumber <= filter.toBlock); },
+ };
+}
+for (const [name, f] of roundFixtures) {
+ const acceptanceBlock = Number(roundProvenance.fixtures[name].acceptanceBlock);
+ const { acceptanceBlock: read, fulfillmentTransactionHash, roundVerifiedBlock, roundVerifiedTransactionHash, ...evidence } = await round.readRoundRequestEvidence(roundMock(f, acceptanceBlock), rhNetwork.coordinator, f.requestId);
+ assert.deepEqual(evidence, f); assert.equal(read, BigInt(acceptanceBlock)); assert.equal(roundVerifiedBlock, BigInt(acceptanceBlock));
+ await assert.rejects(round.readRoundRequestEvidence(roundMock(f, acceptanceBlock), rhNetwork.coordinator, f.requestId, { maxBlocks: 1 }), /Expected one RandomnessFulfilled/);
+}
+// readRequest classifies a request at one block on either coordinator kind; requestIdFromLogs takes the coordinator's RandomnessRequested.
+const [, rh1] = roundFixtures[0];
+const statusAt = async (kind, fields, timestamp) => (await sdk.readRequest({
+ async getBlock() { return { number: 7, timestamp }; },
+ async call(tx) {
+  assert.equal(tx.blockTag, 7);
+  const abi = kind === 'round' ? roundIface : iface, { name } = abi.parseTransaction({ data: tx.data });
+  if (name === 'requestFeePaid') return abi.encodeFunctionResult(name, [5n]);
+  const empty = Object.fromEntries(abi.getFunction(name).outputs[0].components.map(p => [p.name, p.type === 'bool' ? false : p.type === 'address' ? ZeroAddress : p.type === 'bytes32' ? ZeroHash : 0n]));
+  return abi.encodeFunctionResult(name, [{ ...empty, deadline: 100n, ...fields }]);
+ },
+}, { coordinator: rhNetwork.coordinator, kind }, 1n));
+for (const kind of ['round', 'epoch']) {
+ assert.equal((await statusAt(kind, {}, 100)).status, 'pending');
+ assert.equal((await statusAt(kind, {}, 101)).status, 'expired');
+ assert.equal((await statusAt(kind, { refunded: true }, 101)).status, 'refunded');
+ const done = await statusAt(kind, { fulfilled: true, randomness: rh1.randomness }, 101);
+ assert.equal(done.status, 'fulfilled'); assert.equal(done.randomness, rh1.randomness); assert.equal(done.kind, kind);
+ assert.equal((await statusAt(kind, {}, 100)).randomness, null);
+}
+assert.equal((await statusAt('round', { round: rh1.round, feePaid: 9n }, 100)).round, rh1.round);
+assert.equal((await statusAt('round', { feePaid: 9n }, 100)).feePaid, 9n);
+assert.equal((await statusAt('epoch', {}, 100)).feePaid, 5n);
+const requested = roundIface.encodeEventLog('RandomnessRequested', [42n, ZeroAddress, ZeroHash, ZeroHash, 1n, 100_000n, 1n, ZeroAddress, 2n]);
+assert.equal(sdk.requestIdFromLogs([{ address: '0x' + '22'.repeat(20), ...requested }, { address: rhNetwork.coordinator.toLowerCase(), ...requested }], rhNetwork.coordinator), 42n);
+assert.throws(() => sdk.requestIdFromLogs([], rhNetwork.coordinator), /found 0/);
+// Both kinds quote with the same quoteFeeAt, so quoteRequestFee works on either.
+assert.equal(roundIface.getFunction('quoteFeeAt').selector, iface.getFunction('quoteFeeAt').selector);
+// Round helpers that only schedule and hash carry no BN254 code; verification does.
+for (const names of ['roundFor, roundTime, roundAt, roundScheduleFromEvents, roundSeed, D20_NETWORKS, readRequest']) assert.equal(bytesFrom(await bundleOf(names), bn254Code), 0, names);
+for (const names of ['verifyRoundSignature', 'replayRoundRequest']) assert(bytesFrom(await bundleOf(names), bn254Code) > 0, names);
 // Off-chain fee quoting against a mock provider (no network): header base fee in, quoteFeeAt at the actual and buffered base fee out.
 const gwei = 10n**9n, pricing = { minFee: 8n*10n**16n, multiplier: 5n, overhead: 300_000n }, coordinatorAddress = '0x000000000000000000000000000000000000d20d';
 const quoteAt = (gas, base) => { const dynamic = pricing.multiplier*base*(pricing.overhead+gas); return dynamic > pricing.minFee ? dynamic : pricing.minFee; };
@@ -445,12 +605,14 @@ for (const f of fixtures) {
 }
 const consumer=new Interface(compiled.contracts['@d20dao/vrf-sdk/contracts/interfaces/ID20VRF.sol'].ID20VRF.abi);
 assert(consumer.getFunction('quoteFee') && consumer.getFunction('quoteFeeAt') && !consumer.hasFunction('requestFee'));
-consumer.forEachFunction(fragment=>{
- const coordinator=iface.getFunction(fragment.format('sighash'));assert(coordinator);
+// Both coordinators implement ID20VRF exactly, so the examples run unchanged on Arc and on Robinhood Chain.
+for (const abi of [iface, roundIface]) consumer.forEachFunction(fragment=>{
+ const coordinator=abi.getFunction(fragment.format('sighash'));assert(coordinator);
  assert.equal(coordinator.selector,fragment.selector);assert.equal(coordinator.stateMutability,fragment.stateMutability);
  assert.deepEqual(coordinator.outputs.map(p=>p.format('sighash')),fragment.outputs.map(p=>p.format('sighash')));
 });
 console.log(fixtureProvenance.sourceMode+' recipe fixture coverage: '+coveredRecipes.join(', ')+'; legacy ANU evidence: '+legacyFixtures.length+' fixtures');
 console.log('Real Arc replay: '+Object.entries(liveSets).map(([set, {fixtures: recorded}]) => set+' '+recorded.length+' (recipes '+recipesOf(liveSets[set]).join(', ')+')').join('; ')+'; drand rounds verified: '+drand.rounds.length+'.');
+console.log('Real Robinhood Chain replay: requests '+roundFixtures.map(([, f]) => `${f.requestId} (round ${f.round})`).join(', ')+', every check passed, beacon schedule from '+beaconLogs.logs.length+' logs.');
 console.log('Examples compiled from the installed package and exercised: '+exampleNames.join(', ')+'.');
 console.log('Current epoch/VRF replay, ABI, off-chain fee quoting, strict TypeScript, browser-target bundle ('+bundle.outputFiles[0].contents.length+' bytes) and Solidity checks passed.');

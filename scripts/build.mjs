@@ -31,14 +31,22 @@ for (const name of ['.generated', 'dist', 'abi', 'contracts', 'notices']) {
   if (dirname(target) !== pkg) throw new Error('Unsafe generated output path');
   rmSync(target, { recursive: true, force: true });
 }
-const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'templates', 'epoch', 'beacon'];
-const sdkModules = ['fees'];
+const modules = ['index', 'mapping', 'verification', 'sources', 'replay', 'evidence', 'templates', 'epoch', 'beacon', 'round', 'drand', 'vrf'];
+const sdkModules = ['fees', 'networks', 'requests', 'roundevidence'];
 const toEsm = source => source.replace(/(from\s+["']\.\/[^"']+)\.ts(["'])/g, '$1.js$2');
 // The public root entry is the protocol index plus these SDK-owned exports appended verbatim.
-const rootExports = 'export { quoteRequestFee, DEFAULT_FEE_BUFFER_BPS } from "./fees.js";\nexport type { FeeQuote, FeeQuoteOptions, FeeQuoteProvider } from "./fees.js";\n';
+// The /round entry is the protocol round module plus the SDK-owned chain readers that gather its replay input; the root has both.
+const roundReaderExports = 'export { readRoundRequestEvidence, readRoundBeaconLogs } from "./roundevidence.js";\n'
+  + 'export type { RoundEvidenceProvider, RoundLogQuery } from "./roundevidence.js";\n';
+const rootExports = 'export { quoteRequestFee, DEFAULT_FEE_BUFFER_BPS } from "./fees.js";\nexport type { FeeQuote, FeeQuoteOptions, FeeQuoteProvider } from "./fees.js";\n'
+  + 'export { D20_NETWORKS, getD20Network } from "./networks.js";\n'
+  + 'export type { D20Network, D20NetworkName, D20CoordinatorKind, EpochNetwork, RoundNetwork } from "./networks.js";\n'
+  + 'export { readRequest, requestIdFromLogs, requestIdsFromLogs } from "./requests.js";\n'
+  + 'export type { RequestState, RequestStatus, RequestReadProvider, RequestLog } from "./requests.js";\n'
+  + roundReaderExports;
 for (const name of modules) {
   // Mechanical module-specifier conversion only; protocol implementation remains canonical in repo/src.
-  put(`.generated/${name}.ts`, toEsm(read(`src/${name}.ts`)) + (name === 'index' ? rootExports : ''));
+  put(`.generated/${name}.ts`, toEsm(read(`src/${name}.ts`)) + (name === 'index' ? rootExports : name === 'round' ? roundReaderExports : ''));
 }
 for (const name of sdkModules) {
   const bytes = readFileSync(resolve(pkg, `src/${name}.ts`));
@@ -51,6 +59,7 @@ const input = {
     'contracts/EpochEntropy.sol': { content: read('contracts/EpochEntropy.sol') },
     'contracts/D20Proxy.sol': { content: read('contracts/D20Proxy.sol') },
     'contracts/D20BeaconVerifier.sol': { content: read('contracts/D20BeaconVerifier.sol') },
+    'contracts/robinhood/D20VRFCoordinatorRobinhood.sol': { content: read('contracts/robinhood/D20VRFCoordinatorRobinhood.sol') },
   },
   settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'cancun', outputSelection: { '*': { '*': ['abi'] } } },
 };
@@ -73,7 +82,9 @@ const epochEntropyAbi = output.contracts['contracts/EpochEntropy.sol'].EpochEntr
 put('abi/EpochEntropy.json', JSON.stringify(epochEntropyAbi, null, 2) + '\n');
 const beaconVerifierAbi = output.contracts['contracts/D20BeaconVerifier.sol'].D20BeaconVerifier.abi;
 put('abi/D20BeaconVerifier.json', JSON.stringify(beaconVerifierAbi, null, 2) + '\n');
-put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\nexport const beaconVerifierAbi = ${JSON.stringify(beaconVerifierAbi)} as const;\n`);
+const roundCoordinatorAbi = output.contracts['contracts/robinhood/D20VRFCoordinatorRobinhood.sol'].D20VRFCoordinatorRobinhood.abi;
+put('abi/D20VRFCoordinatorRobinhood.json', JSON.stringify(roundCoordinatorAbi, null, 2) + '\n');
+put('.generated/abi.ts', `// Generated from canonical protocol sources with solc ${solc.version()}.\nexport const coordinatorAbi = ${JSON.stringify(abi)} as const;\nexport const epochEntropyAbi = ${JSON.stringify(epochEntropyAbi)} as const;\nexport const beaconVerifierAbi = ${JSON.stringify(beaconVerifierAbi)} as const;\nexport const roundCoordinatorAbi = ${JSON.stringify(roundCoordinatorAbi)} as const;\n`);
 const options = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
   strict: true, skipLibCheck: false, declaration: true, rootDir: resolve(pkg, '.generated'), outDir: resolve(pkg, 'dist'), types: [], noEmitOnError: true };
 const program = ts.createProgram([...modules, ...sdkModules, 'abi'].map(n => resolve(pkg, `.generated/${n}.ts`)), options);
@@ -88,4 +99,4 @@ put('notices/CHAINLINK-LICENSE', read('contracts/vendor/CHAINLINK-LICENSE'));
 put('notices/BLS-BN254-LICENSE', read('contracts/vendor/bls-bn254/LICENSE'));
 put('notices/PROVENANCE.md', read('contracts/vendor/PROVENANCE.md'));
 put('BUILD-MANIFEST.json', JSON.stringify(manifest, null, 2) + '\n');
-console.log('Built public ESM/declarations, canonical coordinator/epoch registry/beacon verifier ABIs and four consumer Solidity sources.');
+console.log('Built public ESM/declarations, canonical coordinator/epoch registry/beacon verifier/round coordinator ABIs and four consumer Solidity sources.');

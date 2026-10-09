@@ -1,0 +1,34 @@
+{
+  "sourceMode": "live Robinhood Chain",
+  "chainId": "4663",
+  "rpc": "https://rpc.mainnet.chain.robinhood.com",
+  "coordinator": "0xEc8b95B168c87294c45727Bd2ac903d09316D132",
+  "recorder": "scripts/record-round-fixture.mjs",
+  "note": "The first two Robinhood Chain requests, recorded 2026-10-09 from the public RPC: request 1, one d20 whose mapped value is 18, and request 2, three d20s (1, 4, 10), both from the same consumer and bound to drand evmnet rounds 21344821 and 21344827. Each fulfilment also verified its round (RoundVerified in the fulfilment transaction). beacon-logs.json holds the beacon logs from the proxy deployment block 84205956 to the later acceptance block: the registration and the initial schedule of beacon 0. The public RPC serves no historical state, so coordinatorImplementation comes from the proxy Upgraded logs, not the ERC-1967 slot. Re-recording with scripts/record-round-fixture.mjs reproduces every file byte for byte.",
+  "fixtures": {
+    "round-replay-1.json": {
+      "requestId": "1",
+      "beaconId": 0,
+      "round": "21344821",
+      "roundLeadSeconds": "4",
+      "requestBlock": "84221365",
+      "roundVerifiedBlock": "84221414",
+      "roundVerifiedTransactionHash": "0x14cc0107d23916a0b7510d76cf7e630c2efdb0aa9e99294714f2f379cc4dcd43",
+      "acceptanceBlock": "84221414",
+      "fulfillmentTransactionHash": "0x14cc0107d23916a0b7510d76cf7e630c2efdb0aa9e99294714f2f379cc4dcd43",
+      "coordinatorImplementation": "0xC8Cd79B9092AEA38f3434388F291eb861b148f45"
+    },
+    "round-replay-2.json": {
+      "requestId": "2",
+      "beaconId": 0,
+      "round": "21344827",
+      "roundLeadSeconds": "5",
+      "requestBlock": "84221531",
+      "roundVerifiedBlock": "84221592",
+      "roundVerifiedTransactionHash": "0xccca0e45da73c4ddf0a556ac895c577164344a3e31e7362fe3697a1ef3a1a446",
+      "acceptanceBlock": "84221592",
+      "fulfillmentTransactionHash": "0xccca0e45da73c4ddf0a556ac895c577164344a3e31e7362fe3697a1ef3a1a446",
+      "coordinatorImplementation": "0xC8Cd79B9092AEA38f3434388F291eb861b148f45"
+    }
+  }
+}

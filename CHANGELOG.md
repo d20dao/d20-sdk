@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.6.0
+
+Robinhood Chain joins Arc. The service is live on Robinhood Chain (chain 4663) since 2026-10-09 and on its testnet
+(chain 46630), through `D20VRFCoordinatorRobinhood`, which binds each request to a future drand evmnet round. Its
+consumer interface is `ID20VRF`, the same as Arc's, so the examples and existing consumers work on both chains
+unchanged. Arc's API is unchanged from 0.5.0.
+
+### Protocol
+
+- `protocol/` adds the round coordinator: `contracts/robinhood/` (`D20VRFCoordinatorRobinhood`, `BeaconBook`,
+  `ArbitrumBlocks`, `D20VRFProofVerifier`, `LinkedRandomnessMapping`) and the replay library `src/round.ts`, with
+  the neutral drand and VRF helpers `src/drand.ts` and `src/vrf.ts` that `src/beacon.ts` and `src/verification.ts`
+  now re-export. Arc's contracts are unchanged and its replay gives the same results.
+- Robinhood Chain: coordinator proxy `0xEc8b95B168c87294c45727Bd2ac903d09316D132`; testnet
+  `0x2f26513DE4Ed388947f5d22FD395D5E06f472f05`. Both run implementation `0xC8Cd79B9092AEA38f3434388F291eb861b148f45`
+  with proof verifier `0x1EEBe8B8f7a6A18b966C3fBe3f644B8234f93709`, mapping library
+  `0xA57093a645C1Aed12486da50AfA95F3284826849` and beacon verifier `0xd20dA01Aa16AeD6b77Cd8DDb869151802599100a`.
+- Fees are in ETH, `max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit))`, initialized at
+  0.000025 ETH, multiplier 2 and overhead 405,000 gas, with an 80% keeper share. Deadline and refunds work as on Arc.
+
+### SDK
+
+- New `/round` entry point: `replayRoundRequest`, `roundScheduleFromEvents`, `roundAt`, `roundFor`, `roundTime`,
+  `roundSeed`, `roundTranscriptHash`, `roundConfigurationHash`, `roundBeaconIdentity`, `verifyRoundSignature`,
+  `roundRandomness`, `roundDeadline`, `roundAcceptedInTime`, the `ROUND_*` constants, and the chain readers
+  `readRoundRequestEvidence` and `readRoundBeaconLogs`. The root exports them too.
+- `roundCoordinatorAbi` and `abi/D20VRFCoordinatorRobinhood.json`; `API.md` documents the round coordinator.
+- `D20_NETWORKS` and `getD20Network(chainId)`: the four deployments with chain ID, RPC, explorer, native currency,
+  coordinator proxy, implementation, code hash and coordinator kind.
+- `readRequest(provider, network, requestId)` reads a request on either coordinator and classifies it as `pending`,
+  `fulfilled`, `expired` or `refunded`; `requestIdFromLogs` and `requestIdsFromLogs` take request IDs from a receipt.
+  `quoteRequestFee` works unchanged on both chains.
+- Tests replay the first two Robinhood Chain requests, recorded from the public RPC with
+  `scripts/record-round-fixture.mjs`, with their beacon schedule and tampered-value cases, and check that both
+  coordinators implement `ID20VRF` identically.
+- README and `AGENTS.md`: both chains, how each works and the Robinhood Chain trust model.
+- Vendored protocol re-pinned to keeper commit `deee1c8d69446058d1f6dfe1866465000701d131`.
+
 ## 0.5.0
 
 Replay covers drand beacon epochs. Arc Testnet draws its epochs from drand since epoch 11319 (2026-09-30) and Arc

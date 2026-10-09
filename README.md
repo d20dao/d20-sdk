@@ -1,12 +1,14 @@
 # D20DAO VRF SDK
 
-[Verifiable randomness for onchain apps](https://d20dao.org), currently deployed on Arc Mainnet and Arc Testnet. [Get started](https://d20dao.org/docs/getting-started) · [Integration guide](https://d20dao.org/docs/integration) · [Public proof replay](https://d20dao.org/docs/verification).
+[Verifiable randomness for onchain apps](https://d20dao.org), deployed on Arc (Mainnet and Testnet) and Robinhood Chain (mainnet and testnet). [Get started](https://d20dao.org/docs/getting-started) · [Integration guide](https://d20dao.org/docs/integration) · [Public proof replay](https://d20dao.org/docs/verification).
 
 **Randomness your users can check.** Your contract asks the coordinator for a random result and pays a fee. A few seconds later the coordinator calls your contract back with a word taken from a VRF proof it verified on chain. Nobody picks the answer, nobody gets a second attempt, and anyone can replay the proof afterwards with this package.
 
 `@d20dao/vrf-sdk` is everything you need on the application side: the Solidity base contract your consumer inherits, the coordinator ABI, an off-chain fee quote for your front end, and the replay code that re-derives a published result from public evidence. It holds no keys and runs no service.
 
-The service is live on **Arc Mainnet** (chain 5042); develop against **Arc Testnet** (chain 5042002). Requests are permissionless — no allowlist, no subscription, no upfront deposit — but they must come from a contract, so a wallet or backend pays through its own consumer. Each request pays a fee quoted from the current base fee, a fraction of a USDC at typical gas prices (see [Pricing](#pricing)), and is served within 60 seconds or can be refunded.
+The service is live on **Arc Mainnet** (chain 5042) and **Robinhood Chain** (chain 4663); develop against **Arc Testnet** (chain 5042002) or **Robinhood Chain Testnet** (chain 46630). Requests are permissionless — no allowlist, no subscription, no upfront deposit — but they must come from a contract, so a wallet or backend pays through its own consumer. Each request pays a fee quoted from the current base fee, in USDC on Arc and in ETH on Robinhood Chain (see [Pricing](#pricing)), and is served within 60 seconds or can be refunded. The consumer interface is the same on both chains, so one consumer contract works on either.
+
+On Robinhood Chain, each request is bound to a future drand round when it is made, so nobody can know or choose the result in advance. The contract verifies the drand signature and the VRF proof on chain, and anyone can replay a result from public data. Arc works with epochs instead; [How each network works](#how-each-network-works) compares the two.
 
 ## Start here
 
@@ -16,10 +18,10 @@ npm install @d20dao/vrf-sdk
 
 1. **Copy an example.** [`examples/DiceConsumer.sol`](examples/DiceConsumer.sol) rolls a d20, [`examples/RaffleConsumer.sol`](examples/RaffleConsumer.sol) picks one winner from a list, [`examples/LootDropConsumer.sol`](examples/LootDropConsumer.sol) makes a weighted drop. Each is sixty to seventy lines and stands alone.
 2. **Compile it.** Node 22.13+, solc 0.8.28, `evmVersion: cancun`. Hardhat and Foundry settings are in [Compiler setup](#compiler-setup).
-3. **Deploy it** against the coordinator proxy for your chain, from [Deployments](#deployments). There is no default network; configure the address explicitly.
-4. **Request and read.** Quote the fee off-chain, send it through your consumer, take `requestId` from the receipt and poll until `fulfilled` — or until the 60-second deadline passes and you refund. See [Paying for a request](#paying-for-a-request) and [Reading results](#reading-results).
+3. **Deploy it** against the coordinator proxy for your chain, from [Deployments](#deployments) or `D20_NETWORKS`. There is no default network; configure the address explicitly.
+4. **Request and read.** Quote the fee off-chain, send it through your consumer, take `requestId` from the receipt and poll until `fulfilled` — or until the 60-second deadline passes and you refund. See [Paying for a request](#paying-for-a-request) and [Reading results](#reading-results); `readRequest` reads a request the same way on both chains.
 
-Then read [Best practices](#best-practices): ten rules that cover most of what goes wrong. [API.md](API.md) lists every coordinator and registry function, event and error with its selector, caller and, for errors, what to do about it. [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp built this way, and [CHANGELOG.md](CHANGELOG.md) records what changed in this release.
+Then read [Best practices](#best-practices): eleven rules that cover most of what goes wrong. [API.md](API.md) lists every function of both coordinators, the registry and the beacon verifier, event and error with its selector, caller and, for errors, what to do about it. [d20dao/randomizer-demo](https://github.com/d20dao/randomizer-demo) is a complete dapp built this way, and [CHANGELOG.md](CHANGELOG.md) records what changed in this release.
 
 For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.md` and `PROTOCOL-PROVENANCE.json`, plus the [integration skills](https://github.com/d20dao/skills). The website guides are on d20dao.org: [guides](https://d20dao.org/docs) including [Getting started](https://d20dao.org/docs/getting-started) with its Copy prompt action, the guide index [d20dao.org/llms.txt](https://d20dao.org/llms.txt), the full text [d20dao.org/llms-full.txt](https://d20dao.org/llms-full.txt) and [d20dao.org/agents.md](https://d20dao.org/agents.md).
 
@@ -48,7 +50,66 @@ For agent-assisted integration, give your agent the installed `AGENTS.md`, `API.
 | D20DAO explorer | https://arc.d20dao.org | https://arc-testnet.d20dao.org |
 | Deployment manifest | https://d20dao.org/deployments/arc-mainnet.json | https://d20dao.org/deployments/arc-testnet.json |
 
-The native gas token on both networks is USDC with 18 decimals (`1e18` wei is 1 USDC); request fees are paid in it. Test USDC comes from the faucet linked in Arc's [Connect to Arc](https://docs.arc.io/arc/references/connect-to-arc) reference, which also lists alternative RPC providers. Compile with solc 0.8.28 and `evmVersion` `cancun`, the settings this SDK builds and tests with. The manifests record proxy and implementation addresses, implementation code hashes, owner, initialized pricing and deployment receipts. The [D20DAO explorer](https://d20dao.org/explorer) shows and replays requests on both networks.
+| | Robinhood Chain | Robinhood Chain Testnet |
+| --- | --- | --- |
+| Use | Live service, real ETH | Development and testing |
+| Chain ID | `4663` | `46630` |
+| RPC | `https://rpc.mainnet.chain.robinhood.com` | `https://rpc.testnet.chain.robinhood.com` |
+| Block explorer | https://robinhoodchain.blockscout.com | https://explorer.testnet.chain.robinhood.com |
+| Deployment manifest | `deployments/robinhood-mainnet.json` in the keeper source | `deployments/robinhood-testnet.json` in the keeper source |
+
+`D20_NETWORKS` (root export) holds these four deployments: chain ID, RPC, explorer, native currency, coordinator proxy, implementation and its code hash, and the coordinator kind (`epoch` on Arc, `round` on Robinhood Chain); `getD20Network(chainId)` looks one up. On Arc the native gas token is USDC with 18 decimals (`1e18` wei is 1 USDC); on Robinhood Chain it is ETH. Request fees are paid in the native token. Test USDC comes from the faucet linked in Arc's [Connect to Arc](https://docs.arc.io/arc/references/connect-to-arc) reference, which also lists alternative RPC providers. Compile with solc 0.8.28 and `evmVersion` `cancun`, the settings this SDK builds and tests with. The manifests record proxy and implementation addresses, implementation code hashes, owner, initialized pricing and deployment receipts. The [D20DAO explorer](https://d20dao.org/explorer) shows and replays requests on both networks.
+
+## How each network works
+
+Both chains run the same VRF: the operator's fixed secp256k1 key proves a word over the request's fixed fields and a public randomness value that nobody knew when the request was made, and the coordinator verifies the proof on chain before it calls the consumer. The chains differ in where that public value comes from.
+
+### Arc
+
+Arc requests bind an epoch of 200 blocks. The keeper publishes the epoch's packet, a drand round, to the `EpochEntropy` registry when there is paid demand, and each request's seed also binds the hash of a block after that publication. [Request lifecycle](#request-lifecycle) describes the flow, [Replay and verification](#replay-and-verification) the replay (`@d20dao/vrf-sdk/epoch`) and [Security and trust](#security-and-trust) the trust model.
+
+### Robinhood Chain
+
+**How a result is made.** When a request is made, the contract binds it to a future round of drand's evmnet beacon: the first round scheduled at least 3 seconds after the request. Until that round is published, nobody can know or choose the result: not the requester, the operator, the sequencer or drand. The keeper then delivers the operator's VRF output over the request's fixed fields and the round's randomness. The contract verifies the round's BLS signature and the VRF proof before accepting it, and anyone can replay the result from public chain data.
+
+**Assumptions.**
+- **Shared with every Robinhood Chain application:** D20DAO relies on the chain's sequencer for ordering and confirmation.
+- **Shared with other verifiable-randomness services:** results assume the operator's VRF key and the sequencer act independently.
+- **drand:** evmnet is run by the League of Entropy, and its signatures rest on a threshold of independent operators.
+
+**Finality.** Results are confirmed by the sequencer within seconds. Settlement on Ethereum follows in about 15–20 minutes.
+
+**Delivery and refunds.** A typical delivery takes 5–8 seconds. If a request is not fulfilled within 60 seconds, its fee can be refunded to the request's refund address. As with any randomness service, design applications so that a party cannot cancel a request and retry for a better outcome.
+
+**Upgrades.** The coordinator is upgradeable (UUPS). The owner is currently the deployer account and is moving to a 2-of-2 Safe. Beacon changes are scheduled on chain at least 10 minutes ahead.
+
+**What changes for an integrator.** The coordinator, `D20VRFCoordinatorRobinhood`, implements `ID20VRF` exactly as on Arc: the examples, `D20VRFConsumer` and `D20VRFRequests` compile and run unchanged, with the same selectors, events and errors for requesting, paying, refunding and retrying. The differences:
+
+- Fees are in ETH. `fee = max(minFee, feeMultiplier × baseFee × (fulfillGasOverhead + callbackGasLimit))`, as on Arc; both Robinhood deployments started with a 0.000025 ETH minimum fee, multiplier 2 and overhead 405,000 gas, with an 80% keeper share. At a base fee of 0.02 gwei and 100,000 callback gas the dynamic part is 2 × 0.02 gwei × 505,000 = 0.0000202 ETH, so the minimum applies. Read `pricing()` and quote with `quoteRequestFee`, which works unchanged; never hard-code a price.
+- Read a request with `getRoundRequest(requestId)` (in `roundCoordinatorAbi`), not `getRequest`. It returns the request's fields with `beaconId`, `round`, `roundRandomness` (zero until the round is verified on chain) and `feePaid` in place of the epoch fields. `readRequest(provider, network, requestId)` reads either coordinator and classifies the request as `pending`, `fulfilled`, `expired` or `refunded`.
+- `requestBlock` is Robinhood Chain's own block number. A request also emits `RoundAssigned(requestId, beaconId, round)`, and the first fulfilment of a round emits `RoundVerified` with the round's signature.
+- The VRF input binds the chain ID, coordinator, key hash, request ID, consumer, client seed, mapping hash, request block, beacon ID, round and the round's randomness.
+- The refund and retry gas figures in [Gas for refund and retry calls](#gas-for-refund-and-retry-calls) were measured on the Arc coordinator; on Robinhood Chain use `eth_estimateGas` with a margin.
+- The pay-per-call agent API (x402) serves Arc only.
+
+Developer note: send requests as normal transactions through the sequencer. A request forced through Ethereum's delayed inbox takes an earlier timestamp and may bind a round that is already public.
+
+**Replay.** `@d20dao/vrf-sdk/round` recomputes the contract's rules off-chain and replays one fulfilled request: configuration and key hash, the beacon's identity and that it was in force, the round assignment, the round's BLS signature and randomness, the seed, the VRF proof, the proof hash and evidence packet, the transcript, the mapping and its result, and the acceptance time. `readRoundRequestEvidence` gathers its input from an RPC, and `readRoundBeaconLogs` the beacon logs that `roundScheduleFromEvents` turns into the schedule:
+
+```ts
+import { JsonRpcProvider } from 'ethers';
+import { D20_NETWORKS } from '@d20dao/vrf-sdk';
+import { readRoundRequestEvidence, readRoundBeaconLogs, roundScheduleFromEvents, replayRoundRequest } from '@d20dao/vrf-sdk/round';
+
+const network = D20_NETWORKS['robinhood-mainnet'];
+const provider = new JsonRpcProvider(network.rpcUrl, 4663, { staticNetwork: true, batchMaxCount: 1 });
+const evidence = await readRoundRequestEvidence(provider, network.coordinator, 1n);
+const logs = await readRoundBeaconLogs(provider, network.coordinator, { fromBlock: network.deploymentBlock });
+const verdict = replayRoundRequest(evidence, { schedule: roundScheduleFromEvents(network.coordinator, logs) });
+// verdict.valid, verdict.failed (the names of failed checks), verdict.mappedResult
+```
+
+`replayRoundRequest` never throws: malformed or altered evidence fails the checks that read it. As on Arc, replay is mathematical: that the RPC served the chain's canonical blocks and logs, and which implementation ran at each block, are for a separate chain check. `verifyRoundSignature` is the pairing check of `D20BeaconVerifier` computed with `@noble/curves`.
 
 ## Integrate a consumer
 
@@ -210,7 +271,7 @@ Views on the coordinator (all in `coordinatorAbi`; only `getMappedResult` is par
 
 [API.md](API.md) documents every view, event and error, including the order of events in a receipt.
 
-Polling with ethers 6, after sending the request through a consumer such as `DiceConsumer`:
+On Robinhood Chain read `getRoundRequest` instead of `getRequest` ([Robinhood Chain](#robinhood-chain)), or use `readRequest`, which reads either coordinator. Polling with ethers 6 on Arc, after sending the request through a consumer such as `DiceConsumer`:
 
 ```js
 import { Contract } from 'ethers';
@@ -241,7 +302,7 @@ for (;;) {
 - `quoteRequestFee(provider, coordinator, callbackGasLimit, options)` expects an ethers v6 provider such as `JsonRpcProvider` or `BrowserProvider`, or any object with ethers-v6-shaped `getBlock(tag)` (with `baseFeePerGas` as `bigint`) and `call(tx)`. With viem or another client, repeat its steps: read the latest block's `baseFeePerGas`, add the buffer and call `quoteFeeAt(callbackGasLimit, bufferedBaseFee)`.
 - The SDK does not wrap viem or other clients; its ABIs are plain JSON and work with any library.
 - Beacon verification uses the BN254 curve of `@noble/curves`, which takes about 45 ms to evaluate. It is read only inside the functions that verify a round (`verifyBeaconRound`, `beaconRoundMessage`, `verifyEpochAttestation`, `replayEpochCommitment`, `replayCoordinator`), so a bundler leaves it out of a bundle that reaches none of them; importing the package in Node loads it.
-- To add Arc to a browser wallet, use `wallet_addEthereumChain` with the values from [Networks](#networks). The native currency uses 18 decimals:
+- To add a network to a browser wallet, use `wallet_addEthereumChain` with the values from [Networks](#networks) or `D20_NETWORKS`; Robinhood Chain is `0x1237` (4663) and its testnet `0xb626` (46630), with ETH as native currency. The native currency uses 18 decimals:
 
   ```js
   await window.ethereum.request({
@@ -400,7 +461,7 @@ decodeDataTemplate(template)[1]; // { decimal: { fraction: true, exponent: true 
 
 ## Security and trust
 
-The contracts have not had an external security audit. The coordinator source carries the developer comment "Prototype: not audited or validated on Arc"; it is kept byte-for-byte because the source is part of the deployed bytecode metadata. The service is now live on Arc Mainnet, and the absence of an external audit still applies. Reusing the unmodified Chainlink VRF verifier does not extend any upstream audit to this coordinator (`notices/PROVENANCE.md`).
+This section covers Arc; the Robinhood Chain model is in [Robinhood Chain](#robinhood-chain). The contracts have not had an external security audit. The coordinator source carries the developer comment "Prototype: not audited or validated on Arc"; it is kept byte-for-byte because the source is part of the deployed bytecode metadata. The service is now live on Arc Mainnet, and the absence of an external audit still applies. Reusing the unmodified Chainlink VRF verifier does not extend any upstream audit to this coordinator (`notices/PROVENANCE.md`).
 
 Trust model:
 
@@ -415,7 +476,7 @@ Both proxies are atomically initialized ERC1967 endpoints with owner-authorized 
 
 ## Use locally
 
-For SDK development, run `npm ci` and `npm test` from this repository. The test builds, checks that `API.md` matches the reference that `scripts/api-reference.mjs` generates from the built ABIs and the curated `scripts/api-descriptions.mjs` (regenerate with `npm run build && npm run api-reference`), packs and installs a real tarball in an isolated consumer, replays the recipe fixtures and real Arc epochs (signed records and drand beacon epochs of both networks, with tampered-signature, wrong-round, wrong-signer and missing-registration cases), type-checks a strict consumer, exercises `quoteRequestFee` against a mock provider, and compiles all three examples from the installed package and checks the outcomes they publish. `npm pack` also produces an installable local artifact.
+For SDK development, run `npm ci` and `npm test` from this repository. The test builds, checks that `API.md` matches the reference that `scripts/api-reference.mjs` generates from the built ABIs and the curated `scripts/api-descriptions.mjs` (regenerate with `npm run build && npm run api-reference`), packs and installs a real tarball in an isolated consumer, replays the recipe fixtures and real Arc epochs (signed records and drand beacon epochs of both networks, with tampered-signature, wrong-round, wrong-signer and missing-registration cases), replays the first two Robinhood Chain requests with their beacon schedule and tampered-value cases, type-checks a strict consumer, exercises `quoteRequestFee`, `readRequest` and `readRoundRequestEvidence` against mock providers, checks that both coordinators implement `ID20VRF` identically, and compiles all three examples from the installed package and checks the outcomes they publish. `npm pack` also produces an installable local artifact.
 
 ```js
 import { builtins, mapRandomness, replayCoordinator, quoteRequestFee } from '@d20dao/vrf-sdk';
@@ -424,23 +485,23 @@ const mapping = builtins.d20();
 // Use only an independently verified accepted word for real outcomes.
 ```
 
-The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers, `BUILTIN_EPOCH_RECIPES`, `readEpochRecipes`, `resolveEpochCatalog` and `MAX_ATTESTATION_AGE`, and the root also exports the data-template helpers (`encodeDataTemplate`, `decodeDataTemplate`, `matchesDataTemplate`, `isValidDataTemplate`, `validateDataTemplate`), the passthrough-recipe helpers (`PASSTHROUGH_EPOCH_REQUESTS`, `passthroughEpochRecipe`, `canonicalPassthroughRequest`, `parsePassthroughRequest`, `passthroughUrl`) and the beacon helpers ([Beacon epochs](#beacon-epochs)). `/abi` exports `coordinatorAbi`, `epochEntropyAbi` and `beaconVerifierAbi`, with JSON forms `D20VRFCoordinator.json`, `EpochEntropy.json` and `D20BeaconVerifier.json`, all described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
+The root exports ESM and TypeScript declarations, including `quoteRequestFee`, `DEFAULT_FEE_BUFFER_BPS` and the `FeeQuote`, `FeeQuoteOptions` and `FeeQuoteProvider` types; `/epoch` exports epoch helpers, `BUILTIN_EPOCH_RECIPES`, `readEpochRecipes`, `resolveEpochCatalog` and `MAX_ATTESTATION_AGE`, and the root also exports the data-template helpers (`encodeDataTemplate`, `decodeDataTemplate`, `matchesDataTemplate`, `isValidDataTemplate`, `validateDataTemplate`), the passthrough-recipe helpers (`PASSTHROUGH_EPOCH_REQUESTS`, `passthroughEpochRecipe`, `canonicalPassthroughRequest`, `parsePassthroughRequest`, `passthroughUrl`) and the beacon helpers ([Beacon epochs](#beacon-epochs)). The root also exports `D20_NETWORKS`, `getD20Network`, `readRequest`, `requestIdFromLogs` and `requestIdsFromLogs`, and the round helpers; `/round` exports the round coordinator's replay and schedule helpers (`replayRoundRequest`, `roundScheduleFromEvents`, `roundAt`, `roundFor`, `roundTime`, `roundSeed`, `roundTranscriptHash`, `roundConfigurationHash`, `roundBeaconIdentity`, `verifyRoundSignature`, `roundRandomness`, `roundDeadline`, `roundAcceptedInTime`, the `ROUND_*` constants) and the chain readers `readRoundRequestEvidence` and `readRoundBeaconLogs`. `/abi` exports `coordinatorAbi`, `epochEntropyAbi`, `beaconVerifierAbi` and `roundCoordinatorAbi`, with JSON forms `D20VRFCoordinator.json`, `EpochEntropy.json`, `D20BeaconVerifier.json` and `D20VRFCoordinatorRobinhood.json`, all described in the installed `API.md` (`@d20dao/vrf-sdk/API.md`). The service implementations have locked empty constructors and explicit initializers. Registry initialization takes `address[4]`; it is not a four-address constructor deployment.
 
 ## What this package is not
 
 This SDK contains no keeper service, API fetching, proof generation, signer secrets or deployment automation. Installing it neither authorizes nor performs anything on chain.
 
-The protocol source is this repository's [`protocol/`](https://github.com/d20dao/d20-sdk/tree/main/protocol) folder, a byte-for-byte copy of the keeper source at the commit `PROTOCOL-PROVENANCE.json` names; every build checks each file against that file's SHA-256 list. The public keeper repository, [d20dao/keeper](https://github.com/d20dao/keeper), publishes release snapshots, and that commit is ahead of its latest release. `src/fees.ts` (the fee-quoting helper) is SDK-owned rather than vendored; BUILD-MANIFEST.json records it under `packageSources` next to the protocol source, dependency-lock and imported OpenZeppelin hashes. The UUPS build uses OpenZeppelin contracts and contracts-upgradeable 5.6.1. Consumer source is copied exactly; service implementations, test fixtures and provers are excluded from the tarball.
+The protocol source is this repository's [`protocol/`](https://github.com/d20dao/d20-sdk/tree/main/protocol) folder, a byte-for-byte copy of the keeper source at the commit `PROTOCOL-PROVENANCE.json` names; every build checks each file against that file's SHA-256 list. The public keeper repository, [d20dao/keeper](https://github.com/d20dao/keeper), publishes release snapshots, and that commit is ahead of its latest release. `src/fees.ts` (the fee-quoting helper), `src/networks.ts` (the deployments), `src/requests.ts` (`readRequest`, `requestIdFromLogs`) and `src/roundevidence.ts` (the round chain readers) are SDK-owned rather than vendored; BUILD-MANIFEST.json records it under `packageSources` next to the protocol source, dependency-lock and imported OpenZeppelin hashes. The UUPS build uses OpenZeppelin contracts and contracts-upgradeable 5.6.1. Consumer source is copied exactly; service implementations, test fixtures and provers are excluded from the tarball.
 
-Each replay fixture set records how it was produced, so a real capture is never mistaken for a test signature. The Arc sets are accepted requests recorded from the public RPCs with `scripts/record-live-fixture.mjs`: signed-record and drand beacon epochs of both networks. Real drand rounds with hash-to-curve points computed by another library check the beacon code independently. Fixtures are not included in the package. The browser-target bundle is executed under Node, not in an actual browser; independently trusted chain context is still required for real verification.
+Each replay fixture set records how it was produced, so a real capture is never mistaken for a test signature. The Arc sets are accepted requests recorded from the public RPCs with `scripts/record-live-fixture.mjs`: signed-record and drand beacon epochs of both networks. The Robinhood Chain set holds its first two requests, recorded from the public RPC with `scripts/record-round-fixture.mjs`. Real drand rounds with hash-to-curve points computed by another library check the beacon code independently. Fixtures are not included in the package. The browser-target bundle is executed under Node, not in an actual browser; independently trusted chain context is still required for real verification.
 
 SDK installation provides consumer and verification tooling. Chain availability, provider quotas, upgrade administration and application settlement remain separate concerns, and none of them guarantees a particular request's timely fulfillment.
 
 ## Deployments
 
-Both networks run the recipe registry in `EpochEntropy` and the coordinator that pays the keeper share to the authorized wallet which submitted the accepted proof, behind the same proxy addresses as before. Since 2026-09-22 the coordinator also budgets every served member's callback gas before `fulfillRandomnessBatch` reveals any result, and `setPricing` rejects a zero minimum fee with a zero multiplier. The registry implementation also carries beacon recipes (`registerBeacon`, `beaconOf`, `slotSigner`, `verifyBeacon`), whose drand rounds the stateless `D20BeaconVerifier` checks. It is live behind the Arc Testnet proxy since block 64712965 (transaction `0x751797af884715214dd4a4e339dbd3355c935b64afe7a6b1eaf38e7e18895140`) and behind the Arc Mainnet proxy since block 23724929 (transaction `0x5a7a2fa8f15eefccee99f6bd363ce7717e65c5571c8c76396337fd8a1261a7cb`), so the two chains run the same implementation addresses and the same verifier. Their ABIs and storage layouts are those of the source in `protocol/`. Code hashes (`keccak256` of the runtime code): registry implementation `0xb5e125e3b0f63ffe516d781266c1cbacebe3d131148b69f8736d3ca78bcddb12`, coordinator implementation `0x3dda400d8360d7e03b8dacd8ba1ffad7ad672e07628bee7de4542d754dd5348c`, beacon verifier `0x4388250d26298224c4a39d030263550655390ca831ab44c4124f8b0be1f65351`. Epochs published before an upgrade still replay with this SDK: built-in recipes with their built-in definitions, later recipes with the definitions read from the registry.
+Both Arc networks run the recipe registry in `EpochEntropy` and the coordinator that pays the keeper share to the authorized wallet which submitted the accepted proof, behind the same proxy addresses as before. Since 2026-09-22 the coordinator also budgets every served member's callback gas before `fulfillRandomnessBatch` reveals any result, and `setPricing` rejects a zero minimum fee with a zero multiplier. The registry implementation also carries beacon recipes (`registerBeacon`, `beaconOf`, `slotSigner`, `verifyBeacon`), whose drand rounds the stateless `D20BeaconVerifier` checks. It is live behind the Arc Testnet proxy since block 64712965 (transaction `0x751797af884715214dd4a4e339dbd3355c935b64afe7a6b1eaf38e7e18895140`) and behind the Arc Mainnet proxy since block 23724929 (transaction `0x5a7a2fa8f15eefccee99f6bd363ce7717e65c5571c8c76396337fd8a1261a7cb`), so the two chains run the same implementation addresses and the same verifier. Their ABIs and storage layouts are those of the source in `protocol/`. Code hashes (`keccak256` of the runtime code): registry implementation `0xb5e125e3b0f63ffe516d781266c1cbacebe3d131148b69f8736d3ca78bcddb12`, coordinator implementation `0x3dda400d8360d7e03b8dacd8ba1ffad7ad672e07628bee7de4542d754dd5348c`, beacon verifier `0x4388250d26298224c4a39d030263550655390ca831ab44c4124f8b0be1f65351`. Epochs published before an upgrade still replay with this SDK: built-in recipes with their built-in definitions, later recipes with the definitions read from the registry.
 
-Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json). The addresses below are copied from them and are only valid together with the manifest revision they came from, because implementations move through owner-authorized upgrades. Before relying on this SDK's interface, check that the implementation at your chain's proxy matches the manifest entry.
+Obtain proxy addresses, implementation addresses and independently checked code hashes from the public deployment manifests, [arc-mainnet.json](https://d20dao.org/deployments/arc-mainnet.json) and [arc-testnet.json](https://d20dao.org/deployments/arc-testnet.json), and for Robinhood Chain from `deployments/robinhood-mainnet.json` and `deployments/robinhood-testnet.json` of the keeper source. The addresses below are copied from them and are only valid together with the manifest revision they came from, because implementations move through owner-authorized upgrades. Before relying on this SDK's interface, check that the implementation at your chain's proxy matches the manifest entry.
 
 ### Arc Mainnet
 
@@ -473,3 +534,21 @@ Chain ID: **5042002**. For development and testing. Use the **coordinator proxy*
 | D20CostClient | Implementation | [`0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b`](https://testnet.arcscan.app/address/0xD20DA00A872acfDe3e4721Fc1051BD23CC84B66b) |
 
 Addresses are copied from the [Arc Testnet deployment manifest](https://d20dao.org/deployments/arc-testnet.json). The EpochEntropy implementation above is live behind the proxy from block 64712965; before it the proxy ran `0xd20dA048C969e5aDcC703Dfdf8220cc9dCB2f865`. Explorer links identify addresses; they do not assert explorer source-code verification. The cost client is internal tooling, not a shared application entry point.
+
+### Robinhood Chain mainnet
+
+Chain ID: **4663**. The live service; use the **coordinator proxy** when constructing a consumer. Owner and fee recipient: the deployer account `0x7ad78fc8097DFEA5c12DBb503D6EB6E60f34B40B`, moving to a 2-of-2 Safe.
+
+| Contract | Role | Robinhood Chain address |
+| --- | --- | --- |
+| D20VRFCoordinatorRobinhood | Consumer entry point / proxy | [`0xEc8b95B168c87294c45727Bd2ac903d09316D132`](https://robinhoodchain.blockscout.com/address/0xEc8b95B168c87294c45727Bd2ac903d09316D132) |
+| D20VRFCoordinatorRobinhood | Implementation | [`0xC8Cd79B9092AEA38f3434388F291eb861b148f45`](https://robinhoodchain.blockscout.com/address/0xC8Cd79B9092AEA38f3434388F291eb861b148f45) |
+| D20VRFProofVerifier | VRF proof check, stateless, fixed in the implementation | [`0x1EEBe8B8f7a6A18b966C3fBe3f644B8234f93709`](https://robinhoodchain.blockscout.com/address/0x1EEBe8B8f7a6A18b966C3fBe3f644B8234f93709) |
+| LinkedRandomnessMapping | Linked mapping library | [`0xA57093a645C1Aed12486da50AfA95F3284826849`](https://robinhoodchain.blockscout.com/address/0xA57093a645C1Aed12486da50AfA95F3284826849) |
+| D20BeaconVerifier | drand round verifier, stateless, not behind a proxy | [`0xd20dA01Aa16AeD6b77Cd8DDb869151802599100a`](https://robinhoodchain.blockscout.com/address/0xd20dA01Aa16AeD6b77Cd8DDb869151802599100a) |
+
+### Robinhood Chain Testnet
+
+Chain ID: **46630**. For development and testing. The implementation, proof verifier, mapping library and beacon verifier have the same addresses as on mainnet; the coordinator proxy is [`0x2f26513DE4Ed388947f5d22FD395D5E06f472f05`](https://explorer.testnet.chain.robinhood.com/address/0x2f26513DE4Ed388947f5d22FD395D5E06f472f05). Owner and fee recipient: the deployer account.
+
+Code hashes (`keccak256` of the runtime code), the same on both networks: coordinator implementation `0xe692b447c02225cb95c921ed29952edb566f2afdfe28ff929452b4909460e8f6`, proof verifier `0x2038efbfea08f4fe79add117570209e0ac7128ead09ad815b166d159454fdb64`, mapping library `0xc6148c742f31804eee99c3599a87ab25c988f65422842b37a12d5fd27e4794cd`, beacon verifier `0x4388250d26298224c4a39d030263550655390ca831ab44c4124f8b0be1f65351`. Both coordinators register drand evmnet (`DRAND_EVMNET`) as beacon 0. The source of the implementation is `protocol/contracts/robinhood/`.

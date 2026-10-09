@@ -15,7 +15,7 @@ export const externalNames = [
   'Address', 'BLOCKHASH', 'BLS', 'D20Proxy', 'D20VRFConsumer', 'D20VRFRequests', 'ECDSA', 'Error', 'IBeaconVerifier', 'ID20VRF', 'Initializable', 'InvalidCoordinator', 'MappingSpec',
   'OnlyCoordinator', 'Panic', 'RandomnessMapping', 'Result', 'Strings', 'abi', 'blockhash', 'builtins', 'decodeEpochEvidencePacket',
   'decodeErrorResult', 'decodeEvidencePacket', 'getValue', 'hashMapping', 'keccak256', 'max', 'onRefund', 'parseError',
-  'quoteRequestFee', 'rawFulfillRandomness', 'readEpochRecipes', 'replayEpochCommitment', 'toEthSignedMessageHash', 'toObject', '_onRefund', 'encodeDataTemplate',
+  'quoteRequestFee', 'rawFulfillRandomness', 'ArbSys', 'D20BeaconVerifier', 'D20VRFProofVerifier', 'LinkedRandomnessMapping', 'roundScheduleFromEvents', 'roundAt', 'replayRoundRequest', 'roundBeaconIdentity', 'roundSeed', 'roundConfigurationHash', 'verifyRoundSignature', 'readEpochRecipes', 'replayEpochCommitment', 'toEthSignedMessageHash', 'toObject', '_onRefund', 'encodeDataTemplate',
 ];
 
 // Ownership, upgrade and initialization items that both proxies inherit from OpenZeppelin 5.6.1.
@@ -1201,3 +1201,406 @@ export const references = [
     ],
   },
 ];
+
+// D20VRFCoordinatorRobinhood: the round coordinator of Robinhood Chain. Items it shares with D20VRFCoordinator reuse that text
+// where the behavior is the same; every `src` cites the round coordinator's own source.
+const arc = references[0];
+const arcEntry = (kind, name, changes) => {
+  const group = arc[kind].find(g => Object.hasOwn(g.items, name));
+  if (!group) throw new Error(`api-descriptions: no D20VRFCoordinator ${kind} ${name} to reuse`);
+  return { ...group.items[name], ...changes };
+};
+const fn = (name, changes) => arcEntry('functions', name, changes);
+const ev = (name, changes) => arcEntry('events', name, changes);
+const er = (name, changes) => arcEntry('errors', name, changes);
+const book = lines => `robinhood/BeaconBook.sol:${lines}`;
+const arcRequest = arc.types['D20VRFCoordinator.Request'].fields;
+const BOOK_SOURCE = 'protocol/contracts/robinhood/BeaconBook.sol';
+references.push({
+  key: 'round',
+  title: 'D20VRFCoordinatorRobinhood',
+  abi: 'abi/D20VRFCoordinatorRobinhood.json',
+  source: 'robinhood/D20VRFCoordinatorRobinhood.sol',
+  intro: [
+    'The consumer entry point on Robinhood Chain (README [Robinhood Chain](README.md#robinhood-chain)). It implements `ID20VRF` exactly like `D20VRFCoordinator`, so a consumer compiled against `contracts/interfaces/ID20VRF.sol` and `D20VRFConsumer` works on both; the differences are in how a request is bound and read. A request binds, when it is made, the first drand evmnet round scheduled at least `ROUND_LEAD` (3) seconds after its block\'s timestamp, instead of an epoch packet; the result is the operator\'s VRF output over the request\'s fixed fields and that round\'s randomness, and the first fulfilment that serves a request of a round verifies the round\'s BLS signature on chain. Requests are read with `getRoundRequest`, not `getRequest`. Fees and credits are wei of ETH. `roundCoordinatorAbi` from `@d20dao/vrf-sdk/abi` carries everything below.',
+    'Block numbers (`requestBlock`) are Robinhood Chain\'s own L2 block numbers, read from the `ArbSys` precompile, not Solidity\'s `block.number`, which on an Arbitrum chain is the parent chain\'s. VRF proofs are checked by the stateless `D20VRFProofVerifier` and mapped results computed by the linked `LinkedRandomnessMapping` library, both at addresses fixed in the implementation\'s code. Requests, fulfilment, retries, `refundRequest` and withdrawals are `nonReentrant`, with the same consequence for callbacks as on Arc.',
+  ],
+  types: {
+    'D20VRFCoordinatorRobinhood.RoundRequest': {
+      src: '72-92',
+      text: 'Returned by `getRoundRequest`: every seed input, the result, the escrowed fee and the status of a request in one read. It does not contain the refund ratio; read `requestRefundBps`.',
+      fields: {
+        consumer: arcRequest.consumer,
+        callbackGasLimit: arcRequest.callbackGasLimit,
+        requestBlock: 'Robinhood Chain block of the request transaction (`ArbSys.arbBlockNumber`).',
+        deadline: arcRequest.deadline,
+        refundAddress: arcRequest.refundAddress,
+        clientSeed: arcRequest.clientSeed,
+        mappingHash: arcRequest.mappingHash,
+        beaconId: 'Beacon in force at the request block\'s timestamp, fixed at creation (`RoundAssigned`).',
+        round: 'drand round the request binds, fixed at creation: the first round of `beaconId` scheduled at least `ROUND_LEAD` seconds after the request block\'s timestamp.',
+        roundRandomness: 'The round\'s randomness, `sha256` of its verified signature (drand\'s own randomness value). Zero until a fulfilment verified the round on chain.',
+        randomness: arcRequest.randomness,
+        proofHash: arcRequest.proofHash,
+        transcriptHash: '`keccak256(abi.encode(TRANSCRIPT_DOMAIN, chainId, coordinator, requestId, protocolConfigurationHash, beaconId, round, roundRandomness, proofHash, randomness, mappingHash))`. Zero until `fulfilled`.',
+        feePaid: 'Fee escrowed by the request, the same value as `requestFeePaid`.',
+        fulfilled: arcRequest.fulfilled,
+        delivered: arcRequest.delivered,
+        refunded: arcRequest.refunded,
+      },
+    },
+    'D20VRFCoordinatorRobinhood.RoundSignature': {
+      src: '93-95',
+      text: 'A round\'s signature carried by `fulfillRandomnessBatch`. It is verified only when a served member binds that round and the round is not verified on chain yet.',
+      fields: {
+        beaconId: 'Beacon of the round.',
+        round: 'drand round number.',
+        signature: 'The round\'s 64-byte BN254 G1 signature, `x ‖ y`, as drand publishes it.',
+      },
+    },
+    'D20VRFCoordinatorRobinhood.InitParams': {
+      src: '96-105',
+      text: 'The first argument of `initialize`.',
+      fields: {
+        publicKey: 'VRF public key `(x, y)` on secp256k1; `keyHash` is its hash. There is no setter.',
+        owner: 'Initial owner: upgrade authority.',
+        feeRecipient: 'Initial fee recipient, also kept as `initialFeeRecipient` and bound into `protocolConfigurationHash`.',
+        keeper: 'Primary keeper wallet, paid the keeper share of fulfilments by submitters that are not allowed backup keepers.',
+        keeperBps: 'Keeper share in basis points, 0 to 10000.',
+        minFee: 'Initial minimum fee in wei, also kept as `initialMinFee` and bound into `protocolConfigurationHash`.',
+        feeMultiplier: 'Initial base-fee multiplier.',
+        fulfillGasOverhead: 'Initial gas overhead of the fee formula.',
+      },
+    },
+    'BeaconBook.BeaconRegistration': {
+      src: book('33-36'),
+      text: 'A beacon to register with `registerBeacon` (and beacon 0 at `initialize`), with a past round of it whose signature must verify.',
+      fields: {
+        verifier: 'Contract that checks the beacon\'s round signatures, such as `D20BeaconVerifier`; it must have code.',
+        chainHash: 'drand chain hash naming the network; non-zero.',
+        publicKey: 'The beacon\'s group public key, as the verifier reads it (128 bytes for drand evmnet).',
+        genesis: 'Unix time of round 1; non-zero and below 2^40.',
+        period: 'Seconds between rounds, 1 to `MAX_BEACON_PERIOD`.',
+        sampleRound: 'A round scheduled no later than the registration block, whose signature vouches for the key.',
+        sampleSignature: 'That round\'s signature; the verifier must accept it under `ROUND_VERIFY_GAS`.',
+      },
+    },
+    'BeaconBook.Beacon': {
+      src: book('31-32'),
+      text: 'Returned by `getBeacon`: a registration as stored. Rounds of the beacon are scheduled at `genesis + (round - 1) × period`.',
+      fields: {
+        verifier: 'Contract that checks the beacon\'s round signatures.',
+        genesis: 'Unix time of round 1.',
+        period: 'Seconds between rounds.',
+        chainHash: 'drand chain hash naming the network.',
+        publicKey: 'The beacon\'s group public key.',
+      },
+    },
+    'RandomnessMapping.Spec': arc.types['RandomnessMapping.Spec'],
+    'VRF.Proof': arc.types['VRF.Proof'],
+  },
+  functions: [
+    {
+      title: 'Requesting',
+      intro: 'Requests must come from a contract and pay at least the fee computed in their own transaction, in ETH; see README [Paying for a request](README.md#paying-for-a-request). The same functions, selectors and errors as on Arc, except that a request cannot fail for an unstarted epoch.',
+      items: {
+        quoteFee: fn('quoteFee', { src: '292-297', text: 'Fee for a request with this `callbackGasLimit` priced at `block.basefee`, that is `quoteFeeAt(callbackGasLimit, block.basefee)`. Exact inside the requesting transaction, which is how `D20VRFRequests` helpers pay. Through `eth_call` the base fee can be reported as 0, so off-chain quote with `quoteFeeAt` and the latest header base fee plus a buffer, as `quoteRequestFee` does. It does not check the gas limit range.' }),
+        quoteFeeAt: fn('quoteFeeAt', { src: '284-291' }),
+        requestRandomness: fn('requestRandomness', {
+          src: '300-305, 313-347',
+          text: 'Creates a raw request (spec all zero) with `msg.sender` as consumer and returns its ID. Needs `msg.value` at least the fee computed in this transaction; escrows exactly that fee and credits any excess to `_refundAddress` as refund credit. Fixes the request block, client seed, refund address, fee, refund ratio (`refundBps`), a deadline of `block.timestamp + RESPONSE_TIMEOUT` and the beacon and drand round the request binds. After acceptance the consumer receives `rawFulfillRandomness(requestId, randomness)` with exactly `callbackGasLimit` gas. Checks run in this order: caller has code, refund address non-zero, gas limit in range, fee, mapping.',
+          emits: ['FeeOverpaymentCredited', 'RandomnessRequested', 'MappingRequested', 'RoundAssigned'],
+          errors: ['ContractConsumerRequired', 'InvalidRefundAddress', 'InvalidCallbackGas', 'FeeOverflow', 'IncorrectFee'],
+        }),
+        requestMappedRandomness: fn('requestMappedRandomness', {
+          src: '307-311, 313-347',
+          emits: ['FeeOverpaymentCredited', 'RandomnessRequested', 'MappingRequested', 'RoundAssigned'],
+          errors: ['ContractConsumerRequired', 'InvalidRefundAddress', 'InvalidCallbackGas', 'FeeOverflow', 'IncorrectFee', 'InvalidMapping'],
+        }),
+      },
+    },
+    {
+      title: 'Pricing and refund settings',
+      table: true,
+      intro: arc.functions.find(g => g.title === 'Pricing and refund settings').intro,
+      items: {
+        pricing: fn('pricing', { src: '275-277' }),
+        minFee: fn('minFee', { src: '58', text: 'Minimum fee in wei, at most `MAX_MIN_FEE` (0.01 ETH).' }),
+        feeMultiplier: fn('feeMultiplier', { src: '60, 59' }),
+        fulfillGasOverhead: fn('fulfillGasOverhead', { src: '61' }),
+        refundBps: fn('refundBps', { src: '63, 62' }),
+      },
+    },
+    {
+      title: 'Reading request state and results',
+      intro: 'Views, callable by anyone, including from a callback. Request IDs start at 1 and increase by one; functions taking a `requestId` revert `UnknownRequest` for an ID that was never issued.',
+      items: {
+        getRoundRequest: {
+          caller: 'Anyone (view)',
+          src: '349-369',
+          text: 'Full state of a request, see [`D20VRFCoordinatorRobinhood.RoundRequest`](#round-type-d20vrfcoordinatorrobinhood-roundrequest). `beaconId` and `round` are fixed at creation; `roundRandomness` becomes non-zero once any fulfilment verified the round. `fulfilled` means the word is final; `delivered` only reports that a callback succeeded. A request that is not `fulfilled` in a block whose timestamp is after `deadline` has expired and can only be refunded. When polling, read the latest block before `getRoundRequest`.',
+          errors: ['UnknownRequest'],
+        },
+        getMapping: fn('getMapping', { src: '401-404' }),
+        getMappedResult: fn('getMappedResult', { src: '406-410' }),
+        mapRandomness: fn('mapRandomness', { src: '412-417' }),
+        requestFeePaid: fn('requestFeePaid', { src: '392-395' }),
+        requestRefundBps: fn('requestRefundBps', { src: '396-399' }),
+        refundCallbackDelivered: fn('refundCallbackDelivered', { src: '128, 596' }),
+        nextRequestId: fn('nextRequestId', { src: '64, 208, 322' }),
+      },
+    },
+    {
+      title: 'Settlement, refunds and credits',
+      intro: 'Recovery calls need no value or role. They forward gas to the consumer and revert `InsufficientCallbackGas` rather than forward less, as on Arc (README [Gas for refund and retry calls](README.md#gas-for-refund-and-retry-calls)); the gas figures there were measured for the Arc coordinator, so on Robinhood Chain use `eth_estimateGas` and a margin. Refund credit and keeper credit are pull balances: only the holder withdraws them.',
+      items: {
+        refundRequest: fn('refundRequest', { src: '551-575, 587-598', text: 'Refunds an unfulfilled request once a block timestamp is after its deadline. Marks it refunded, sends `feePaid × requestRefundBps / 10000` to the fixed refund address with a 30,000-gas transfer, or adds it to that address\'s refund credit if the transfer fails, and adds the rest of the fee to `earnedFees`. Then calls `onRefund(requestId)` on the consumer with 100,000 gas; a failed notification does not undo the refund. The caller receives nothing.' }),
+        retryCallback: fn('retryCallback', { src: '541-549, 690-707', text: 'Calls `rawFulfillRandomness` again with the same accepted word after a failed callback, forwarding `gasLimit` (30,000 to 1,000,000 and not below the request\'s `callbackGasLimit`). Sets `delivered` on success. Pays nobody and never changes the word.' }),
+        retryRefundCallback: fn('retryRefundCallback', { src: '577-585, 587-598', text: 'Repeats a failed `onRefund` notification for a refunded request with `gasLimit` (100,000 to 1,000,000). Never transfers funds again.' }),
+        withdrawRefundCredit: fn('withdrawRefundCredit', { src: '600-610' }),
+        withdrawFees: fn('withdrawFees', { src: '612-621' }),
+        withdrawKeeperCredit: fn('withdrawKeeperCredit', { src: '623-632' }),
+      },
+    },
+    {
+      title: 'Settlement balances',
+      table: true,
+      intro: 'Views, callable by anyone. Amounts are in wei of ETH.',
+      items: {
+        refundCredits: fn('refundCredits', { src: '70' }),
+        totalRefundCredits: fn('totalRefundCredits', { src: '69' }),
+        earnedFees: fn('earnedFees', { src: '65' }),
+        feeRecipient: fn('feeRecipient', { src: '54' }),
+        keeperFeeBps: fn('keeperFeeBps', { src: '55, 517' }),
+        keeperCredits: fn('keeperCredits', { src: '56' }),
+        totalKeeperCredits: fn('totalKeeperCredits', { src: '57' }),
+      },
+    },
+    {
+      title: 'Beacons and rounds',
+      intro: 'Views, callable by anyone. Beacons are registered once and never change; one is in force at a time, and a change is scheduled at least `MIN_SCHEDULE_LEAD` ahead. A round is verified on chain once, by the first fulfilment that serves one of its requests, and its randomness is cached for every later one. `roundScheduleFromEvents`, `roundAt` and `replayRoundRequest` in `@d20dao/vrf-sdk/round` recompute these rules off-chain.',
+      items: {
+        beaconCount: { caller: 'Anyone (view)', src: book('74'), text: 'Number of registered beacons; ids are 0 to `beaconCount() - 1`.' },
+        getBeacon: { caller: 'Anyone (view)', src: book('75-79, 208-212'), text: 'A registration, see [`BeaconBook.Beacon`](#round-type-beaconbook-beacon).', errors: ['InvalidBeacon'] },
+        beaconIdentity: { caller: 'Anyone (view)', src: book('80-84, 213-215'), text: '`keccak256(abi.encode(ROUND_BEACON_DOMAIN, verifier, chainHash, keccak256(publicKey), genesis, period))` of a registration; no two registrations share one. Beacon 0\'s identity is bound into `protocolConfigurationHash`. `roundBeaconIdentity` computes it off-chain.', errors: ['InvalidBeacon'] },
+        beaconSchedule: { caller: 'Anyone (view)', src: book('85-90, 204-207'), text: 'The beacon in force now and since when, and the pending change, if any: `nextFrom` is zero when none. A change whose time has come shows as the beacon in force.' },
+        roundAt: { caller: 'Anyone (view)', src: book('91-102, 198-202'), text: 'The beacon and round that a request in a block with this timestamp binds, for any timestamp since initialization: the first round `r` with `genesis + (r - 1) × period ≥ timestamp + ROUND_LEAD`, of the beacon in force at that timestamp.' },
+        roundTime: { caller: 'Anyone (view)', src: book('103-108'), text: 'When a beacon\'s round is scheduled: `genesis + (round - 1) × period`. Round 0 does not exist.', errors: ['InvalidBeacon'] },
+        roundRandomness: { caller: 'Anyone (view)', src: book('109-112, 178-183'), text: 'A round\'s cached randomness, `sha256` of its verified signature; zero while the round is not verified on chain.' },
+        checkRoundSignature: { caller: 'Anyone (view)', src: book('113-117, 195-197, 216-228'), text: 'Whether `signature` is a registered beacon\'s valid signature of `round`, asked of the beacon\'s verifier under `ROUND_VERIFY_GAS`. An `eth_call` needs about 460,000 gas; with less it reverts `BeaconGasTooLow` and never answers false.', errors: ['InvalidBeacon', 'BeaconGasTooLow', 'BeaconVerifierFailed'] },
+      },
+    },
+    {
+      title: 'Keeper and proof functions',
+      intro: 'Proof submission is permissionless: anyone holding a valid proof and the round\'s signature may submit them. The keeper share goes to the submitting wallet when it is an allowed backup keeper, and to `keeper()` otherwise. Consumers normally only read `getRoundRequest`. Besides the custom errors listed, proof functions can revert with `Error(string)` messages from the vendored VRF verifier, which are not in the ABI.',
+      items: {
+        fulfillRandomness: {
+          caller: 'Anyone',
+          src: '441-459, 506-532',
+          text: 'Accepts a proof for a request that is not fulfilled, not refunded and not past its deadline; acceptance in a block with timestamp equal to `deadline` is timely. If the request\'s round is not verified on chain yet, it first checks that the gas left covers the callback and the round\'s verification, verifies `roundSignature` with the beacon\'s verifier, caches the round\'s randomness and emits `RoundVerified`; `roundSignature` may be empty once the round is cached. It then verifies the proof against the request\'s seed, stores the word, proof hash and transcript hash, sets `fulfilled`, adds `feePaid` minus the keeper share to `earnedFees` and calls the consumer with `callbackGasLimit` gas. It sends the keeper share (`keeperFeeBps` of `feePaid`) with 30,000 gas to the submitter when it is an allowed backup keeper and to `keeper()` otherwise, or records it as that wallet\'s keeper credit. A failing callback does not revert the fulfilment.',
+          emits: ['RoundVerified', 'RequestServed', 'ProofVerified', 'RandomnessFulfilled', 'FulfillmentEvidence', 'CallbackAttempted', 'KeeperFeePaid'],
+          errors: ['UnknownRequest', 'AlreadyFulfilled', 'RequestRefunded', 'RequestExpired', 'InsufficientCallbackGas', 'BeaconGasTooLow', 'BeaconVerifierFailed', 'InvalidRoundSignature', 'WrongPublicKey', 'WrongSeed', 'EvidencePacketTooLarge'],
+        },
+        fulfillRandomnessBatch: {
+          caller: 'Anyone',
+          src: '461-479, 485-504',
+          text: 'Fulfills up to `MAX_FULFILL_BATCH` (16) requests, one proof each, with `rounds` carrying the signatures of the members\' rounds that may not be verified yet (no more entries than members). Members already fulfilled, refunded or past their deadline are skipped with `FulfillmentSkipped`, and their rounds are never verified; every other member runs exactly like `fulfillRandomness`, so an unknown ID, an invalid proof, a wrong round signature or a round neither cached nor listed reverts the whole batch. Before any result is revealed it checks that the gas left covers every served member and every round still to verify, `140,000 + Σ(callbackGasLimit + callbackGasLimit / 63 + 400,000) + 411,349` per such round, and reverts `InsufficientCallbackGas` otherwise.',
+          emits: ['FulfillmentSkipped', 'RoundVerified', 'RequestServed', 'ProofVerified', 'RandomnessFulfilled', 'FulfillmentEvidence', 'CallbackAttempted', 'KeeperFeePaid'],
+          errors: ['InvalidBatch', 'UnknownRequest', 'RoundUnavailable', 'InsufficientCallbackGas', 'BeaconGasTooLow', 'BeaconVerifierFailed', 'InvalidRoundSignature', 'WrongPublicKey', 'WrongSeed', 'EvidencePacketTooLarge'],
+        },
+        verifyRequestProof: {
+          caller: 'Anyone (view)',
+          src: '425-430, 648-651',
+          text: 'Returns the word a proof yields for the request\'s seed, without changing state, once the request\'s round is verified on chain. A valid proof is not acceptance: check `getRoundRequest(requestId).fulfilled`.',
+          errors: ['UnknownRequest', 'RoundUnavailable', 'WrongPublicKey', 'WrongSeed'],
+        },
+        requestSeed: {
+          caller: 'Anyone (view)',
+          src: '420-424, 663-668',
+          text: 'Seed the proof must use: `keccak256(abi.encode(SEED_DOMAIN, chainId, coordinator, keyHash, requestId, consumer, clientSeed, mappingHash, requestBlock, beaconId, round, roundRandomness))` as uint256. Available only once the round is verified on chain; `getProofContext` computes it from the round\'s signature before that. `roundSeed` computes it off-chain.',
+          errors: ['UnknownRequest', 'RoundUnavailable'],
+        },
+        getProofContext: {
+          caller: 'Anyone (view)',
+          src: '431-439',
+          text: 'The seed to prove together with `deadline`, `fulfilled` and `refunded`, given the round\'s signature: the cached randomness when the round is verified on chain, else the signature, which must verify (an `eth_call` then needs about 500,000 gas). Not a status read for waiting requests; use `getRoundRequest`.',
+          errors: ['UnknownRequest', 'BeaconGasTooLow', 'BeaconVerifierFailed', 'InvalidRoundSignature'],
+        },
+        getPendingRequestIds: fn('getPendingRequestIds', { src: '371-390' }),
+      },
+    },
+    {
+      title: 'Keeper, key and configuration reads',
+      table: true,
+      intro: 'Views, callable by anyone.',
+      items: {
+        lastServedRequestId: fn('lastServedRequestId', { src: '66, 519' }),
+        lastServedIndex: fn('lastServedIndex', { src: '67, 520' }),
+        servedRequestAt: fn('servedRequestAt', { src: '68, 520' }),
+        keyHash: fn('keyHash', { src: '51, 213', text: '`keccak256(abi.encode(publicKey))` of the VRF key; indexed in `RandomnessRequested` and `ProofVerified`. No setter.' }),
+        publicKeyX: fn('publicKeyX', { src: '49' }),
+        publicKeyY: fn('publicKeyY', { src: '50' }),
+        protocolConfigurationHash: fn('protocolConfigurationHash', { src: '48, 223', text: '`keccak256(abi.encode(CONFIG_DOMAIN, publicKey, initialFeeRecipient, initialMinFee, beaconIdentity(0)))`, fixed at initialization; later fee, keeper or beacon changes do not change it. Bound into every transcript hash. `roundConfigurationHash` computes it off-chain.' }),
+        initialFeeRecipient: fn('initialFeeRecipient', { src: '53, 215' }),
+        initialMinFee: fn('initialMinFee', { src: '130, 219' }),
+        proofVerifier: { src: '44-46, 670-677', text: 'The stateless `D20VRFProofVerifier` that checks VRF proofs, fixed in the implementation\'s code (an immutable), so the implementation\'s code hash pins it.' },
+        keeper: { src: '131-132, 514-515', text: 'Primary keeper wallet: paid the keeper share of fulfilments whose submitter is not an allowed backup keeper. Changed with `setKeeper`.' },
+        isBackupKeeper: { src: '259', text: 'Whether an account is an allowed backup keeper, paid the keeper share of the fulfilments it submits itself.' },
+        isAuthorizedKeeper: { src: '260', text: 'Whether an account is `keeper()` or an allowed backup keeper.' },
+        backupKeeperCount: { src: '134, 252-254', text: 'Number of allowed backup keepers, at most `MAX_BACKUP_KEEPERS`.' },
+      },
+    },
+    {
+      title: 'Owner administration',
+      intro: 'Owner-only functions revert `OwnableUnauthorizedAccount` for anyone else. No setter can change an existing request, the VRF key or a beacon registration; there is no pause, and the owner\'s upgrade is the only emergency path.',
+      items: {
+        setPricing: fn('setPricing', { src: '271-274, 635-641', text: 'Sets `minFee` (at most `MAX_MIN_FEE`, 0.01 ETH), `feeMultiplier` (at most `MAX_FEE_MULTIPLIER`, 20) and `fulfillGasOverhead` (`MIN_FULFILL_GAS_OVERHEAD` to `MAX_FULFILL_GAS_OVERHEAD`, 100,000 to 2,000,000 gas). `minFee` and `feeMultiplier` cannot both be zero, so a request is never free. Affects requests created afterwards; open requests keep their escrowed fee.' }),
+        setRefundBps: fn('setRefundBps', { src: '278-282' }),
+        setKeeperFeeBps: fn('setKeeperFeeBps', { src: '267-270' }),
+        setFeeRecipient: fn('setFeeRecipient', { src: '263-266' }),
+        setKeeper: { caller: 'Owner', src: '243-246', text: 'Sets the primary keeper wallet, which earns the keeper share of fulfilments by any submitter that is not an allowed backup keeper. The zero address is rejected.', emits: ['KeeperChanged'], errors: ['OwnableUnauthorizedAccount', 'InvalidConfig'] },
+        setBackupKeeper: { caller: 'Owner', src: '247-258', text: 'Allows or disallows a backup keeper wallet, at most `MAX_BACKUP_KEEPERS` at a time. Rejects the zero address, allowing `keeper()`, and a call that changes nothing.', emits: ['BackupKeeperSet'], errors: ['OwnableUnauthorizedAccount', 'InvalidConfig'] },
+        registerBeacon: { caller: 'Owner', src: '233-236', text: 'Appends a beacon (see [`BeaconBook.BeaconRegistration`](#round-type-beaconbook-beaconregistration)) and returns its id. The verifier must accept the key and the sample round\'s signature under `ROUND_VERIFY_GAS`; an identity already registered, more than `MAX_BEACONS` beacons, or values outside the registration\'s bounds revert. A registration never changes; `scheduleBeacon` puts it in force.', emits: ['BeaconRegistered'], errors: ['OwnableUnauthorizedAccount', 'InvalidBeacon', 'BeaconGasTooLow', 'BeaconVerifierFailed'] },
+        scheduleBeacon: { caller: 'Owner', src: '237-240', text: 'Puts a registered beacon in force for requests whose block timestamp is `fromTime` or later, at least `MIN_SCHEDULE_LEAD` (10 minutes) from now. Earlier requests keep the beacon they bound. A pending change is replaced without an event; a change whose time has come is kept as a past era.', emits: ['BeaconScheduled'], errors: ['OwnableUnauthorizedAccount', 'InvalidBeacon', 'InvalidSchedule'] },
+        cancelBeaconSchedule: { caller: 'Owner', src: '241-242', text: 'Drops the pending beacon change before it takes effect.', emits: ['BeaconScheduleCancelled'], errors: ['OwnableUnauthorizedAccount', 'InvalidSchedule'] },
+        ...Object.fromEntries(['owner', 'pendingOwner', 'transferOwnership', 'acceptOwnership', 'upgradeToAndCall', 'proxiableUUID'].map(name => [name, fn(name)])),
+        renounceOwnership: fn('renounceOwnership', { src: '229-230' }),
+        initialize: {
+          caller: 'Once, by `D20Proxy` at deployment',
+          src: '204-224',
+          text: 'Sets owner, VRF public key, fee recipient, keeper, keeper share and pricing from the [`InitParams`](#round-type-d20vrfcoordinatorrobinhood-initparams), with `refundBps` 10000, registers `beacon` as beacon 0 in force from this block, and binds `protocolConfigurationHash`.',
+          emits: ['OwnershipTransferred', 'PricingChanged', 'BeaconRegistered', 'BeaconScheduled', 'Initialized'],
+          errors: ['InvalidInitialization', 'OwnableInvalidOwner', 'InvalidConfig', 'InvalidPublicKey', 'InvalidBeacon', 'BeaconGasTooLow', 'BeaconVerifierFailed'],
+        },
+      },
+    },
+    {
+      title: 'Constants',
+      constants: true,
+      intro: 'Views returning values fixed in the implementation code.',
+      items: {
+        ...Object.fromEntries(['MIN_CALLBACK_GAS', 'MAX_CALLBACK_GAS', 'RESPONSE_TIMEOUT', 'REFUND_CALLBACK_GAS', 'MAX_FULFILL_BATCH', 'MAX_EVIDENCE_PACKET_BYTES',
+          'MAX_FEE_MULTIPLIER', 'MIN_FULFILL_GAS_OVERHEAD', 'MAX_FULFILL_GAS_OVERHEAD', 'MIN_REFUND_BPS', 'SEED_DOMAIN', 'TRANSCRIPT_DOMAIN', 'CONFIG_DOMAIN', 'UPGRADE_INTERFACE_VERSION'].map(name => [name, fn(name)])),
+        MAX_MIN_FEE: { text: 'Highest `minFee`: 0.01 ETH.' },
+        MAX_BACKUP_KEEPERS: { text: 'Most allowed backup keepers at a time.' },
+        ROUND_LEAD: { valueFrom: BOOK_SOURCE, text: 'A request binds the first round scheduled at least this many seconds after its block\'s timestamp.' },
+        MAX_BEACONS: { valueFrom: BOOK_SOURCE, text: 'Most beacons that can be registered.' },
+        MAX_BEACON_PERIOD: { valueFrom: BOOK_SOURCE, text: 'Longest round period a beacon may have, in seconds.' },
+        MIN_SCHEDULE_LEAD: { valueFrom: BOOK_SOURCE, text: 'Shortest delay, in seconds, between scheduling a beacon change and its taking effect.' },
+        ROUND_VERIFY_GAS: { valueFrom: BOOK_SOURCE, text: 'Gas a beacon verifier gets for one question; the call needs 411,349 left to give it that (`BeaconGasTooLow` otherwise).' },
+        ROUND_BEACON_DOMAIN: { valueFrom: BOOK_SOURCE, text: 'Domain tag of `beaconIdentity`.' },
+      },
+    },
+  ],
+  events: [
+    {
+      title: 'Request lifecycle',
+      items: {
+        RandomnessRequested: ev('RandomnessRequested', { src: '166-170, 343-344' }),
+        MappingRequested: ev('MappingRequested', { src: '186, 345' }),
+        RoundAssigned: { src: '171-172, 346', text: 'The beacon and drand round the request binds, fixed at creation. Emitted right after `MappingRequested`.' },
+        FeeOverpaymentCredited: ev('FeeOverpaymentCredited', { src: '180, 336-342' }),
+        RoundVerified: { src: book('69-71, 178-183'), text: 'A round was verified on chain for the first time, with its signature: the evidence every request of the round replays. Emitted once per round, by whichever fulfilment first serves a request of it, so it does not identify a keeper.' },
+        RequestServed: ev('RequestServed', { src: '188, 519-521' }),
+        ProofVerified: ev('ProofVerified', { src: '187, 522' }),
+        RandomnessFulfilled: ev('RandomnessFulfilled', { src: '173, 523', text: 'A proof was accepted and `randomness` is final. `submitter` sent the transaction; `KeeperFeePaid` names the wallet that received the keeper share, which is `submitter` only when it is an allowed backup keeper.' }),
+        FulfillmentEvidence: ev('FulfillmentEvidence', { src: '191-192, 534-538' }),
+        CallbackAttempted: ev('CallbackAttempted', { src: '174, 690-707' }),
+        KeeperFeePaid: ev('KeeperFeePaid', { src: '181, 526-531', text: 'At acceptance, when the keeper share is non-zero: `amount` went to `paidKeeper`, the submitter when it is an allowed backup keeper and `keeper()` otherwise, by a 30,000-gas transfer (`paid` true) or was added to its `keeperCredits` (`paid` false). Emitted after `CallbackAttempted`.' }),
+        FulfillmentSkipped: ev('FulfillmentSkipped', { src: '189-190, 475-476' }),
+        RequestRefundedTo: ev('RequestRefundedTo', { src: '183, 573' }),
+        RefundCallbackAttempted: ev('RefundCallbackAttempted', { src: '185, 587-598' }),
+      },
+    },
+    {
+      title: 'Credits and withdrawals',
+      items: {
+        RefundCreditWithdrawn: ev('RefundCreditWithdrawn', { src: '184, 609' }),
+        KeeperCreditWithdrawn: ev('KeeperCreditWithdrawn', { src: '182, 631', text: '`account` withdrew `amount` of keeper credit to `recipient`.' }),
+        FeesWithdrawn: ev('FeesWithdrawn', { src: '175, 620' }),
+      },
+    },
+    {
+      title: 'Beacons, keepers and administration',
+      items: {
+        BeaconRegistered: { src: book('65-66, 135'), text: 'A beacon was appended with this id, identity and registration. Emitted at `initialize` for beacon 0 and at each `registerBeacon`. The logs from initialization on rebuild the schedule (`roundScheduleFromEvents`).' },
+        BeaconScheduled: { src: book('67, 141, 156'), text: 'A beacon is in force for requests whose block timestamp is `fromTime` or later: at `initialize`, beacon 0 from that block\'s timestamp; at `scheduleBeacon`, the pending change, which replaces any earlier pending one.' },
+        BeaconScheduleCancelled: { src: book('68, 164'), text: 'The pending change to this beacon from `fromTime` was dropped before it took effect.' },
+        KeeperChanged: { src: '193, 245', text: 'New primary keeper wallet.' },
+        BackupKeeperSet: { src: '194, 257', text: 'A backup keeper wallet was allowed (`allowed` true) or disallowed.' },
+        PricingChanged: ev('PricingChanged', { src: '178, 640', text: 'New `minFee`, `feeMultiplier` and `fulfillGasOverhead` for requests created afterwards; also emitted at `initialize`.' }),
+        RefundBpsChanged: ev('RefundBpsChanged', { src: '179, 281' }),
+        KeeperFeeBpsChanged: ev('KeeperFeeBpsChanged', { src: '177, 269' }),
+        FeeRecipientChanged: ev('FeeRecipientChanged', { src: '176, 265' }),
+        ...Object.fromEntries(['OwnershipTransferStarted', 'OwnershipTransferred', 'Upgraded', 'Initialized'].map(name => [name, ev(name)])),
+      },
+    },
+  ],
+  errors: [
+    {
+      title: 'Requesting',
+      items: {
+        ContractConsumerRequired: er('ContractConsumerRequired', { src: '140, 316' }),
+        InvalidRefundAddress: er('InvalidRefundAddress', { src: '152, 317, 602' }),
+        InvalidCallbackGas: er('InvalidCallbackGas', { src: '142, 547, 583, 686-688' }),
+        IncorrectFee: er('IncorrectFee', { src: '141, 320' }),
+        FeeOverflow: er('FeeOverflow', { src: '163, 289' }),
+        InvalidMapping: er('InvalidMapping'),
+      },
+    },
+    {
+      title: 'Reading and recovery',
+      items: {
+        UnknownRequest: er('UnknownRequest', { src: '143, 643-646' }),
+        NotFulfilled: er('NotFulfilled', { src: '145, 408, 544', response: 'Poll `getRoundRequest(requestId)` until `fulfilled`. Once a block timestamp is after `deadline` without fulfilment, the request has expired and only `refundRequest` applies.' }),
+        AlreadyDelivered: er('AlreadyDelivered', { src: '146, 545' }),
+        RefundNotAvailable: er('RefundNotAvailable', { src: '155, 556', response: 'Read `getRoundRequest`: use the result if `fulfilled`, stop if `refunded`, otherwise retry after a block with a later timestamp than `deadline`.' }),
+        NotRefunded: er('NotRefunded', { src: '158, 580' }),
+        RefundCallbackAlreadyDelivered: er('RefundCallbackAlreadyDelivered', { src: '159, 581' }),
+        InsufficientCallbackGas: {
+          src: '149, 455, 472, 565, 590, 698-699',
+          text: 'Too little gas remained to forward the full callback budget and keep the coordinator\'s reserve: `gasLimit + gasLimit/63 + 140,000` before a fulfilment callback, and in a single fulfilment that verifies its round `callbackGasLimit + callbackGasLimit/63 + 140,000 + 400,000 + 411,349` before anything runs; `100,000 + 100,000/63 + 140,000` after refund settlement; `gasLimit + gasLimit/63 + 50,000` before a refund notification; and `140,000 + Σ(callbackGasLimit + callbackGasLimit / 63 + 400,000) + 411,349` per round to verify before `fulfillRandomnessBatch` reveals any result. The coordinator reverts instead of forwarding less.',
+          response: 'Raise the transaction gas limit; `eth_estimateGas` finds the minimum. A keeper sizes a fulfilment or batch to the sums above.',
+        },
+      },
+    },
+    {
+      title: 'Credits and withdrawals',
+      items: {
+        NoRefundCredit: er('NoRefundCredit', { src: '156, 604' }),
+        TransferFailed: er('TransferFailed', { src: '151, 608, 619, 630' }),
+        OnlyFeeRecipient: er('OnlyFeeRecipient', { src: '150, 614' }),
+        NoKeeperCredit: er('NoKeeperCredit', { src: '157, 626' }),
+      },
+    },
+    {
+      title: 'Proofs, rounds and keepers',
+      items: {
+        RoundUnavailable: { src: '648-651, 654-657', text: 'The request\'s round is not verified on chain: `requestSeed` or `verifyRequestProof` before any fulfilment verified it, or a `fulfillRandomnessBatch` member whose round is neither cached nor listed in `rounds`.', response: 'For a consumer this only means the request is still waiting. Keepers pass the round\'s signature (`getProofContext`, `fulfillRandomness`) or list it in the batch.' },
+        InvalidRoundSignature: { src: book('62, 191-194'), text: 'The beacon\'s verifier answered that the signature is not the round\'s.', response: 'Submit drand\'s signature of the request\'s round; `verifyRoundSignature` checks it off-chain.' },
+        BeaconGasTooLow: { src: book('58-59, 218-219'), text: 'Too little gas was left to give a beacon verifier its whole `ROUND_VERIFY_GAS` allowance, so the question was not asked; a valid signature is never read as invalid for want of gas.', response: 'Raise the gas limit: about 460,000 for an `eth_call` of `checkRoundSignature`, 500,000 for `getProofContext` with a signature.' },
+        BeaconVerifierFailed: { src: book('60-61, 216-227'), text: 'A beacon verifier reverted, ran out of its allowance or answered something other than one boolean word.', response: 'Not expected with `D20BeaconVerifier`; the verifier of a registration cannot change.' },
+        AlreadyFulfilled: er('AlreadyFulfilled', { src: '144, 449' }),
+        RequestRefunded: er('RequestRefunded', { src: '154, 450' }),
+        RequestExpired: er('RequestExpired', { src: '153, 451' }),
+        WrongPublicKey: er('WrongPublicKey', { src: '147, 673' }),
+        WrongSeed: er('WrongSeed', { src: '148, 675', text: 'The proof\'s `seed` differs from the request\'s seed (`requestSeed`, or `getProofContext` before the round is cached).' }),
+        EvidencePacketTooLarge: er('EvidencePacketTooLarge', { src: '161, 536' }),
+        InvalidBatch: er('InvalidBatch', { src: '164, 471', text: '`fulfillRandomnessBatch` with no IDs, more than 16, a different number of proofs, or more round signatures than IDs.', response: 'Send 1 to 16 IDs with one proof each and no more round signatures than IDs.' }),
+        InvalidScan: er('InvalidScan', { src: '160, 377' }),
+      },
+    },
+    {
+      title: 'Beacons, administration, initialization and upgrades',
+      items: {
+        InvalidBeacon: { src: book('56, 106, 125-131, 210'), text: 'A beacon id that is not registered (`getBeacon`, `beaconIdentity`, `roundTime`, `scheduleBeacon`), round 0 for `roundTime`, or a registration out of bounds, already registered, or whose verifier refuses its key or sample signature.', response: 'Read `beaconCount` for the registered ids; registration is owner-only.' },
+        InvalidSchedule: { src: book('57, 147, 162'), text: '`scheduleBeacon` less than `MIN_SCHEDULE_LEAD` ahead or beyond 2^40, or `cancelBeaconSchedule` with no change pending or after it took effect.', response: 'Owner procedure only.' },
+        InvalidConfig: er('InvalidConfig', { src: '138, 198, 209, 244, 249, 251, 264, 268, 280, 615, 624, 636, 638', text: 'A value is out of bounds: in `initialize` (zero fee recipient or keeper, keeper share above 10000, pricing outside the `setPricing` bounds) or the constructor (proof verifier without code), `setKeeper` or `setFeeRecipient` with zero, `setBackupKeeper` with zero, with `keeper()`, without a change or beyond `MAX_BACKUP_KEEPERS`, `setKeeperFeeBps` above 10000, `setPricing` outside its bounds or with `minFee` and `feeMultiplier` both zero, `setRefundBps` outside 5000 to 10000, or a zero `recipient` for `withdrawFees` or `withdrawKeeperCredit`.' }),
+        InvalidPublicKey: er('InvalidPublicKey', { src: '139, 210' }),
+        ReentrancyGuardReentrantCall: er('ReentrancyGuardReentrantCall', { text: 'A `nonReentrant` coordinator function (a request, a fulfilment, a retry, `refundRequest` or a withdrawal) was entered while another was running, for example a request made inside `rawFulfillRandomness` or `onRefund`. Inside a callback the coordinator catches it and records the callback as failed.' }),
+        ...Object.fromEntries(Object.keys(upgradeErrors).map(name => [name, er(name)])),
+        RenounceDisabled: er('RenounceDisabled', { src: '162, 230' }),
+      },
+    },
+  ],
+});

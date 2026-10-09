@@ -81,7 +81,7 @@ Arc requests bind an epoch of 200 blocks. The keeper publishes the epoch's packe
 
 **Delivery and refunds.** A typical delivery takes 5–8 seconds. If a request is not fulfilled within 60 seconds, its fee can be refunded to the request's refund address. As with any randomness service, design applications so that a party cannot cancel a request and retry for a better outcome.
 
-**Upgrades.** The coordinator is upgradeable (UUPS). On mainnet the owner is currently the deployer account and is moving to a 2-of-2 Safe; the testnet stays with the deployer account. Beacon changes are scheduled on chain at least 10 minutes ahead.
+**Upgrades.** The coordinator is upgradeable (UUPS) by its owner; read `owner()` from the chain. Beacon changes are scheduled on chain at least 10 minutes ahead.
 
 **What changes for an integrator.** The coordinator, `D20VRFCoordinatorRobinhood`, implements `ID20VRF` exactly as on Arc: the examples, `D20VRFConsumer` and `D20VRFRequests` compile and run unchanged, with the same selectors, events and errors for requesting, paying, refunding and retrying. The differences:
 
@@ -537,7 +537,7 @@ Addresses are copied from the [Arc Testnet deployment manifest](https://d20dao.o
 
 ### Robinhood Chain mainnet
 
-Chain ID: **4663**. The live service; use the **coordinator proxy** when constructing a consumer. Owner and fee recipient: the deployer account `0x7ad78fc8097DFEA5c12DBb503D6EB6E60f34B40B`, moving to a 2-of-2 Safe.
+Chain ID: **4663**. The live service; use the **coordinator proxy** when constructing a consumer. Read the owner and fee recipient from the chain (`owner()`, `feeRecipient()`).
 
 | Contract | Role | Robinhood Chain address |
 | --- | --- | --- |
@@ -549,6 +549,6 @@ Chain ID: **4663**. The live service; use the **coordinator proxy** when constru
 
 ### Robinhood Chain Testnet
 
-Chain ID: **46630**. For development and testing. The implementation, proof verifier, mapping library and beacon verifier have the same addresses as on mainnet; the coordinator proxy is [`0x2f26513DE4Ed388947f5d22FD395D5E06f472f05`](https://explorer.testnet.chain.robinhood.com/address/0x2f26513DE4Ed388947f5d22FD395D5E06f472f05). Owner and fee recipient: the deployer account.
+Chain ID: **46630**. For development and testing. The implementation, proof verifier, mapping library and beacon verifier have the same addresses as on mainnet; the coordinator proxy is [`0x2f26513DE4Ed388947f5d22FD395D5E06f472f05`](https://explorer.testnet.chain.robinhood.com/address/0x2f26513DE4Ed388947f5d22FD395D5E06f472f05). Read the owner and fee recipient from the chain (`owner()`, `feeRecipient()`).
 
 Code hashes (`keccak256` of the runtime code), the same on both networks: coordinator implementation `0xe692b447c02225cb95c921ed29952edb566f2afdfe28ff929452b4909460e8f6`, proof verifier `0x2038efbfea08f4fe79add117570209e0ac7128ead09ad815b166d159454fdb64`, mapping library `0xc6148c742f31804eee99c3599a87ab25c988f65422842b37a12d5fd27e4794cd`, beacon verifier `0x4388250d26298224c4a39d030263550655390ca831ab44c4124f8b0be1f65351`. Both coordinators register drand evmnet (`DRAND_EVMNET`) as beacon 0. The source of the implementation is `protocol/contracts/robinhood/`.

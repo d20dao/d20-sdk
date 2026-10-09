@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+Documentation cleanup.
+
 ## 0.6.0
 
 Robinhood Chain joins Arc. The service is live on Robinhood Chain (chain 4663) since 2026-10-09 and on its testnet

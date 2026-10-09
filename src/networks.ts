@@ -25,7 +25,7 @@ interface NetworkBase {
   coordinatorImplementationCodeHash: string;
   /** Stateless drand BN254 verifier, not behind a proxy. */
   beaconVerifier: string;
-  /** Owner of the proxies: upgrade authority. */
+  /** Owner of the proxies (upgrade authority) as recorded for this SDK release; read `owner()` from the chain for the current one. */
   owner: string;
   /** `protocolConfigurationHash()` bound at initialization; every transcript commits to it. */
   protocolConfigurationHash: string;
